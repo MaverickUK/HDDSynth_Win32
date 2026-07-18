@@ -101,8 +101,18 @@ so these rules apply to every file in `src/`, regardless of which `.exe` it ends
   flag/int can use `Interlocked*` ops directly (see `g_accessActive`). Anything compound
   (multiple fields that must stay consistent with each other, e.g. the loaded WAV buffers)
   needs a `CRITICAL_SECTION` — don't reach for `Interlocked` on a struct.
-- **Versioning**: SemVer in `src/version.h`, pre-1.0 (nothing has been released yet). Bump it
-  with each meaningful change — PATCH for fixes, MINOR for feature additions.
+- **Versioning**: SemVer in `src/version.h`, pre-1.0. Bump it with each meaningful change —
+  PATCH for fixes, MINOR for feature additions. Tagged releases exist from 0.3.0 onward.
+- **Commit subjects drive auto-generated release notes** — start them with `feat:` or `fix:`
+  (`feat(scope):` also fine); `tools/release.sh` groups commits since the last tag into
+  Features/Fixes/Other sections by that prefix when publishing a release. A commit that doesn't
+  follow this just lands under "Other changes," not an error, but following it makes the notes
+  much more useful.
+- **Releasing**: bump `src/version.h`, commit, then run `tools/release.sh` — it builds both
+  targets, runs the static safety checks, packages `build/hddsynth.exe` +
+  `build/hddsynth-nt.exe` + `samples/` into a zip, generates release notes from commit history
+  (see above), tags, pushes, and creates the GitHub release via `gh`. Requires `gh auth login`
+  once beforehand.
 - **Record hard-won gotchas in README's "Gotchas found the hard way" section**, not just in
   commit messages — several of these (CRT/threading issues especially) are easy to
   reintroduce by accident and expensive to re-debug from scratch.

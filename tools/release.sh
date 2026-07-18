@@ -13,8 +13,17 @@
 #   3. Packages build/hddsynth.exe + build/hddsynth-nt.exe + samples/ into a
 #      self-contained folder inside a zip, so extracting it gives something
 #      immediately runnable on whichever OS family it's used on.
-#   4. Tags the current commit vX.Y.Z and pushes main + the tag.
-#   5. Creates a GitHub release from that tag via `gh`, attaching the zip.
+#   4. Generates release notes from commit messages since the previous tag,
+#      grouped into Features/Fixes/Other by conventional-commit prefix
+#      (feat:/fix:/anything else) -- see "Commit message convention" below.
+#   5. Tags the current commit vX.Y.Z and pushes main + the tag.
+#   6. Creates a GitHub release from that tag via `gh`, attaching the zip
+#      and the generated notes.
+#
+# Commit message convention the notes generator relies on: start each
+# commit subject with "feat:" or "fix:" (optionally "feat(scope):") to
+# have it grouped accordingly; anything else lands under "Other changes".
+# This only looks at commit subjects, not the full body.
 #
 # Requires: gh (GitHub CLI), authenticated (`gh auth login`) with push
 # access to the repo. Run from the repo root.
@@ -87,6 +96,42 @@ rm -f "$ZIP_PATH"
 rm -rf "$STAGE_DIR"
 echo "Packaged $ZIP_PATH"
 
+echo "--- Generating release notes ---"
+PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+if [ -n "$PREV_TAG" ]; then
+    COMMIT_RANGE="$PREV_TAG..HEAD"
+else
+    COMMIT_RANGE="HEAD"
+fi
+
+FEATS=$(git log --pretty=format:'%s' "$COMMIT_RANGE" | grep -E '^feat(\([^)]*\))?:' || true)
+FIXES=$(git log --pretty=format:'%s' "$COMMIT_RANGE" | grep -E '^fix(\([^)]*\))?:' || true)
+OTHER=$(git log --pretty=format:'%s' "$COMMIT_RANGE" | grep -vE '^(feat|fix)(\([^)]*\))?:' || true)
+
+REMOTE_URL=$(git remote get-url origin | sed -E 's/\.git$//; s#^git@github\.com:#https://github.com/#')
+
+NOTES_FILE=$(mktemp)
+{
+    if [ -n "$FEATS" ]; then
+        echo "### Features"
+        echo "$FEATS" | sed -E 's/^feat(\([^)]*\))?: ?/- /'
+        echo
+    fi
+    if [ -n "$FIXES" ]; then
+        echo "### Fixes"
+        echo "$FIXES" | sed -E 's/^fix(\([^)]*\))?: ?/- /'
+        echo
+    fi
+    if [ -n "$OTHER" ]; then
+        echo "### Other changes"
+        echo "$OTHER" | sed -E 's/^/- /'
+        echo
+    fi
+    if [ -n "$PREV_TAG" ]; then
+        echo "**Full diff**: $REMOTE_URL/compare/$PREV_TAG...$TAG"
+    fi
+} > "$NOTES_FILE"
+
 echo "--- Tagging and pushing ---"
 git tag -a "$TAG" -m "$TAG"
 git push origin main
@@ -95,6 +140,7 @@ git push origin "$TAG"
 echo "--- Creating GitHub release ---"
 gh release create "$TAG" "$ZIP_PATH" \
     --title "$TAG" \
-    --notes "See README.md for details on this version's changes."
+    --notes-file "$NOTES_FILE"
+rm -f "$NOTES_FILE"
 
 echo "Done: $TAG released with $PACKAGE_NAME.zip attached."
