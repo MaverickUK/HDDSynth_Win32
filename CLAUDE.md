@@ -103,11 +103,16 @@ so these rules apply to every file in `src/`, regardless of which `.exe` it ends
   needs a `CRITICAL_SECTION` — don't reach for `Interlocked` on a struct.
 - **Versioning**: SemVer in `src/version.h`, pre-1.0. Bump it with each meaningful change —
   PATCH for fixes, MINOR for feature additions. Tagged releases exist from 0.3.0 onward.
-- **Commit subjects drive auto-generated release notes** — start them with `feat:` or `fix:`
-  (`feat(scope):` also fine); `tools/release.sh` groups commits since the last tag into
-  Features/Fixes/Other sections by that prefix when publishing a release. A commit that doesn't
-  follow this just lands under "Other changes," not an error, but following it makes the notes
-  much more useful.
+- **One logical change per commit, each with its own `feat:`/`fix:` subject** — don't bundle a
+  feature and a fix (or two unrelated fixes) into a single commit. `tools/release.sh` groups
+  commits since the last tag into Features/Fixes/Other sections by subject prefix when
+  publishing a release, one line per commit — a bundled commit collapses into a single bullet
+  under whichever prefix it happened to start with, silently dropping the rest from the notes.
+  This bit us once already (an Apply-button feature + a balance-mute fix landed in one commit
+  and one release-notes line — see the v0.5.0 release). If a change naturally splits into
+  independent pieces, commit and (if releasing) it's fine to have several `feat:`/`fix:` commits
+  land in the same release; what matters is each commit subject accurately describing that
+  commit's one change, not spreading unrelated work across releases.
 - **Releasing**: bump `src/version.h`, commit, then run `tools/release.sh` — it builds both
   targets, runs the static safety checks, packages `build/hddsynth.exe` +
   `build/hddsynth-nt.exe` + `samples/` into a zip, generates release notes from commit history
