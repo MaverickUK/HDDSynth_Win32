@@ -1,32 +1,29 @@
 // Software PCM mixer: spin-up plays once, then idle loops forever with
 // the access sample layered on top while activity is detected. Runs
 // entirely inside MixerFillBuffer, called from the audio engine's
-// dedicated buffer-refill thread -- the only cross-thread entry point is
-// MixerSetAccessActive (called from the GUI thread, forwarding the disk
-// monitor's findings), hence the Interlocked access to g_accessActive.
+// dedicated buffer-refill thread.
 //
-// The access layer doesn't just loop continuously while active: it plays
-// only while activity is detected, with a floor so a very brief blip
-// still produces an audible ~200ms snippet rather than a clipped
-// fraction-of-a-second click, and each activation starts from a random
-// point in the sample rather than always the beginning, so repeated
-// triggers don't sound identical/mechanical.
+// Two kinds of shared mutable state, two synchronization approaches:
+//  - g_accessActive is a single flag set from the GUI thread (forwarding
+//    the disk monitor's findings) -- Interlocked access is enough.
+//  - The sample buffers themselves (g_spinup/g_idle/g_access) and the
+//    volume/balance/min-playback settings can all be replaced from the
+//    GUI thread (Settings dialog, sample pack switch) while the audio
+//    thread is mid-mix. These are compound/multi-field state an
+//    Interlocked op can't swap atomically, so they're behind
+//    g_lock instead.
 #include "mixer.h"
 #include "wav.h"
 
-// Access layer is mixed in below full volume so it reads as "activity on
-// top of the idle hum" rather than replacing it, echoing the original
-// hardware's balance control between idle and access.
-#define ACCESS_MIX_NUM 3
-#define ACCESS_MIX_DEN 4
-
-#define ACCESS_MIN_PLAY_MS 200
-
 enum MixerPhase { PHASE_SPINUP, PHASE_IDLE };
 
+static CRITICAL_SECTION g_lock;
 static WavPcm g_spinup;
 static WavPcm g_idle;
 static WavPcm g_access;
+static int g_volume = 100;
+static int g_balance = 50;
+static int g_minPlaybackMs = 200;
 
 static MixerPhase g_phase = PHASE_SPINUP;
 static size_t g_spinupPos = 0;
@@ -54,7 +51,10 @@ static unsigned long NextRandom() {
     return (g_rngState >> 16) & 0x7fffffffUL;
 }
 
-bool MixerInit(const char *spinupPath, const char *idlePath, const char *accessPath) {
+bool MixerInit(const char *spinupPath, const char *idlePath, const char *accessPath,
+               int volume, int balance, int minPlaybackMs) {
+    InitializeCriticalSection(&g_lock);
+
     if (!LoadWavMono16(spinupPath, &g_spinup) ||
         !LoadWavMono16(idlePath, &g_idle) ||
         !LoadWavMono16(accessPath, &g_access)) {
@@ -66,6 +66,9 @@ bool MixerInit(const char *spinupPath, const char *idlePath, const char *accessP
     g_accessPos = 0;
     g_accessPlaying = false;
     g_accessMinRemaining = 0;
+    g_volume = volume;
+    g_balance = balance;
+    g_minPlaybackMs = minPlaybackMs;
     SeedRng((unsigned long)GetTickCount());
     return true;
 }
@@ -77,19 +80,29 @@ static short ClampSample(int v) {
 }
 
 void MixerFillBuffer(short *out, size_t count) {
+    EnterCriticalSection(&g_lock);
+
+    int volume = g_volume;
+    // idleWeightX100/accessWeightX100 range 50..150 as balance sweeps
+    // 100..0 / 0..100 -- 50 = equal weight either side of the 50/50
+    // center, so neither layer is ever silenced by balance alone.
+    int idleWeightX100 = 150 - g_balance;
+    int accessWeightX100 = 50 + g_balance;
+
     for (size_t i = 0; i < count; i++) {
         if (g_phase == PHASE_SPINUP) {
             if (g_spinup.sampleCount == 0 || g_spinupPos >= g_spinup.sampleCount) {
                 g_phase = PHASE_IDLE;
                 g_idlePos = 0;
             } else {
-                out[i] = g_spinup.samples[g_spinupPos++];
+                int v = (g_spinup.samples[g_spinupPos++] * volume) / 100;
+                out[i] = ClampSample(v);
                 continue;
             }
         }
 
         // PHASE_IDLE
-        int mixed = g_idle.samples[g_idlePos];
+        int mixed = (g_idle.samples[g_idlePos] * idleWeightX100) / 100;
         g_idlePos++;
         if (g_idlePos >= g_idle.sampleCount) {
             g_idlePos = 0;
@@ -102,11 +115,11 @@ void MixerFillBuffer(short *out, size_t count) {
         if (activeNow && !g_accessPlaying && g_access.sampleCount > 0) {
             g_accessPlaying = true;
             g_accessPos = NextRandom() % g_access.sampleCount;
-            g_accessMinRemaining = (size_t)((unsigned long long)g_idle.sampleRate * ACCESS_MIN_PLAY_MS / 1000);
+            g_accessMinRemaining = (size_t)((unsigned long long)g_idle.sampleRate * g_minPlaybackMs / 1000);
         }
 
         if (g_accessPlaying && g_access.sampleCount > 0) {
-            mixed += (g_access.samples[g_accessPos] * ACCESS_MIX_NUM) / ACCESS_MIX_DEN;
+            mixed += (g_access.samples[g_accessPos] * accessWeightX100) / 100;
             g_accessPos++;
             if (g_accessPos >= g_access.sampleCount) {
                 g_accessPos = 0;
@@ -120,20 +133,75 @@ void MixerFillBuffer(short *out, size_t count) {
             }
         }
 
+        mixed = (mixed * volume) / 100;
         out[i] = ClampSample(mixed);
     }
+
+    LeaveCriticalSection(&g_lock);
 }
 
 void MixerSetAccessActive(BOOL active) {
     InterlockedExchange(&g_accessActive, active ? 1 : 0);
 }
 
+void MixerSetVolume(int volume) {
+    EnterCriticalSection(&g_lock);
+    g_volume = volume;
+    LeaveCriticalSection(&g_lock);
+}
+
+void MixerSetBalance(int balance) {
+    EnterCriticalSection(&g_lock);
+    g_balance = balance;
+    LeaveCriticalSection(&g_lock);
+}
+
+void MixerSetMinPlaybackMs(int ms) {
+    EnterCriticalSection(&g_lock);
+    g_minPlaybackMs = ms;
+    LeaveCriticalSection(&g_lock);
+}
+
 unsigned long MixerGetSampleRate() {
     return g_idle.sampleRate;
+}
+
+bool MixerSwitchSamplePack(const char *spinupPath, const char *idlePath, const char *accessPath) {
+    WavPcm newSpinup, newIdle, newAccess;
+    if (!LoadWavMono16(spinupPath, &newSpinup)) {
+        return false;
+    }
+    if (!LoadWavMono16(idlePath, &newIdle)) {
+        FreeWavPcm(&newSpinup);
+        return false;
+    }
+    if (!LoadWavMono16(accessPath, &newAccess)) {
+        FreeWavPcm(&newSpinup);
+        FreeWavPcm(&newIdle);
+        return false;
+    }
+
+    EnterCriticalSection(&g_lock);
+    FreeWavPcm(&g_spinup);
+    FreeWavPcm(&g_idle);
+    FreeWavPcm(&g_access);
+    g_spinup = newSpinup;
+    g_idle = newIdle;
+    g_access = newAccess;
+    // The drive is already "spun up" -- a pack switch goes straight to
+    // idle rather than replaying spin-up.
+    g_phase = PHASE_IDLE;
+    g_idlePos = 0;
+    g_accessPos = 0;
+    g_accessPlaying = false;
+    g_accessMinRemaining = 0;
+    LeaveCriticalSection(&g_lock);
+    return true;
 }
 
 void MixerShutdown() {
     FreeWavPcm(&g_spinup);
     FreeWavPcm(&g_idle);
     FreeWavPcm(&g_access);
+    DeleteCriticalSection(&g_lock);
 }

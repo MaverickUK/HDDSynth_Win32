@@ -45,11 +45,16 @@ $(BUILD)/hddsynth.res.o: res/hddsynth.rc res/gray.ico res/green.ico src/resource
 	mkdir -p $(BUILD)
 	$(WINDRES) -I src $< -O coff -o $@
 
-HDDSYNTH_SRCS := src/tray.cpp src/audio.cpp src/mixer.cpp src/wav.cpp src/diskmon.cpp
+HDDSYNTH_SRCS := src/tray.cpp src/audio.cpp src/mixer.cpp src/wav.cpp src/diskmon.cpp \
+                 src/paths.cpp src/samplepack.cpp src/settings.cpp \
+                 src/about_dialog.cpp src/settings_dialog.cpp
+HDDSYNTH_HDRS := src/audio.h src/mixer.h src/wav.h src/diskmon.h src/paths.h \
+                 src/samplepack.h src/settings.h src/about_dialog.h src/settings_dialog.h \
+                 src/version.h src/resource.h
 
-$(BUILD)/hddsynth.exe: $(HDDSYNTH_SRCS) src/audio.h src/mixer.h src/wav.h src/diskmon.h $(BUILD)/hddsynth.res.o
+$(BUILD)/hddsynth.exe: $(HDDSYNTH_SRCS) $(HDDSYNTH_HDRS) $(BUILD)/hddsynth.res.o
 	mkdir -p $(BUILD)
-	$(CXX) $(CXXFLAGS) $(HDDSYNTH_SRCS) $(BUILD)/hddsynth.res.o -o $@ $(LDFLAGS) -lshell32 -luser32 -lgdi32 -lkernel32 -lwinmm -ladvapi32
+	$(CXX) $(CXXFLAGS) $(HDDSYNTH_SRCS) $(BUILD)/hddsynth.res.o -o $@ $(LDFLAGS) -lshell32 -luser32 -lgdi32 -lkernel32 -lwinmm -ladvapi32 -lcomctl32
 
 clean:
 	rm -rf $(BUILD)

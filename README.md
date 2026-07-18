@@ -9,17 +9,26 @@ disk activity in software and plays the same sample-based audio, so you get auth
 spinning-HDD sound (and a gray/green tray icon) on a machine that's actually running a
 solid-state drive — no wiring required.
 
-**Status**: working end-to-end, confirmed on real Windows 98 hardware.
+**Status**: working end-to-end, confirmed on real Windows 98 hardware. Versioned with SemVer
+(`src/version.h`) — pre-1.0 since this hasn't been released yet; bumped with each change.
 
 ## Behavior
 
 - On launch: plays the spin-up sample once, then loops the idle sample continuously.
 - While real disk activity is detected: mixes the access sample in on top of the idle loop,
   starting from a random point in the sample each time so repeated triggers don't sound
-  identical, with a 200ms minimum play time so brief activity doesn't get clipped to a click.
+  identical, with a configurable minimum play time (default 200ms) so brief activity doesn't
+  get clipped to a click.
 - Tray icon is gray when idle, green while activity is detected.
 - Ordinary background OS housekeeping I/O doesn't trigger it — only sustained transfers above
-  a byte-rate threshold count as "activity" (see Design notes).
+  a configurable byte-rate threshold count as "activity".
+- Right-click the tray icon for:
+  - **Sample** — a submenu listing every subfolder under `samples\` (each a self-contained
+    sample pack); picking one switches live, no restart needed.
+  - **Settings...** — volume, idle/activity balance, minimum access playback time, and the
+    activity detection threshold, persisted to `hddsynth.ini` next to the exe.
+  - **About...** — Win9x-style about box with version, author, and a link to the project page.
+  - **Exit**.
 - Runs quietly in the background alongside other software — event-driven audio thread that's
   fully asleep between buffer refills, sleep-based poll loop for disk detection, no busy-
   waiting anywhere.
@@ -28,10 +37,10 @@ solid-state drive — no wiring required.
 
 ```
 src/        C++ sources
-res/        Icon resources (gray.ico / green.ico) + the .rc resource script
-samples/    The four original WAV samples (fetched from HDDSynth's samples/original/)
+res/        Icon resources (gray.ico / green.ico), the .rc resource script + dialog templates
+samples/    Sample packs -- one subfolder per pack, e.g. samples/original/
 tools/      tools/make_icons.py (icon generator), tools/build-pentium-crt.sh (see Toolchain)
-build/      Build output (gitignored-worthy; not currently a git repo)
+build/      Build output (gitignored-worthy)
 Makefile    Cross-compilation build rules
 ```
 
@@ -39,24 +48,35 @@ Makefile    Cross-compilation build rules
 |---|---|
 | `src/tray.cpp` | Tray icon, context menu, window/message loop, `WinMain` |
 | `src/audio.cpp` / `audio.h` | Owns the single `waveOut` stream and its dedicated refill thread |
-| `src/mixer.cpp` / `mixer.h` | Software PCM mixing: spin-up → idle loop → access layering |
+| `src/mixer.cpp` / `mixer.h` | Software PCM mixing: spin-up → idle loop → access layering, volume/balance, live pack swaps |
 | `src/wav.cpp` / `wav.h` | Minimal WAV/PCM loader |
 | `src/diskmon.cpp` / `diskmon.h` | Background thread polling `HKEY_DYN_DATA\PerfStats` for disk activity |
+| `src/settings.cpp` / `settings.h` | `hddsynth.ini` load/save |
+| `src/settings_dialog.cpp` / `.h` | Settings dialog (volume/balance sliders, threshold/min-playback edits) |
+| `src/about_dialog.cpp` / `.h` | About box |
+| `src/samplepack.cpp` / `.h` | Scans `samples\` for pack subfolders, builds per-pack WAV paths |
+| `src/paths.cpp` / `.h` | Resolves paths relative to the exe's own directory, not the CWD |
+| `src/version.h` | SemVer + app name/author/GitHub URL, shown in the About box |
 | `src/spike_main.cpp` | Standalone toolchain-validation spike (not part of `hddsynth.exe`) |
 
 ## Samples
 
-`samples/` contains the four original HDDSynth WAV files, fetched as-is from the upstream
-repo (GPL-3.0, same license as HDDSynth itself):
+`samples/` holds one subfolder per **sample pack** — the Sample submenu lists whatever
+subfolders it finds, so adding a pack is just adding a folder. Each pack must contain exactly
+three files:
 
-- `hdd_spinup.wav` — played once at startup
-- `hdd_idle_long.wav` — looped while idle (the shorter `hdd_idle.wav` is also present but
-  unused — it felt too repetitive in testing)
-- `hdd_access.wav` — mixed in during detected activity
+- `spinup.wav` — played once at startup (not replayed on a pack switch — the drive is already
+  "spun up")
+- `idle.wav` — looped while idle
+- `access.wav` — mixed in during detected activity
 
-All four are 16-bit PCM, 16kHz; `hdd_idle_long.wav` is stereo while the others are mono — the
-WAV loader downmixes everything to mono at load time so the mixer can do simple sample-by-
-sample addition.
+`samples/original/` ships with the four original HDDSynth WAVs (GPL-3.0, same license as
+HDDSynth itself) renamed to that convention — `idle.wav` is the longer of the two original idle
+loops (`hdd_idle_long.wav`), per user feedback that the shorter one felt too repetitive; that
+shorter file isn't used. All three are 16-bit PCM; `idle.wav` happens to be stereo while the
+others are mono, but that's not a requirement — the WAV loader downmixes everything to mono at
+load time, and a differing sample rate is handled too (the `waveOut` device is reopened if a
+pack's rate doesn't match the one currently playing).
 
 ## Design notes
 
@@ -68,6 +88,8 @@ sample addition.
 | Detection scope | System-wide (any drive), not a specific drive letter | Matches the original hardware's single-LED simplicity. |
 | Detection source | `HKEY_DYN_DATA\PerfStats\{StartStat,StatData,StopStat}` | Win9x has no modern disk-IO-counter API; this is the same real-time counter feed `sysmon.exe` reads. See Toolchain/gotchas for the two non-obvious things about it. |
 | Detection signal | Delta between polls of `VFAT\BReadsSec`/`BWritesSec`, thresholded | These counters are cumulative totals, not rates (see gotchas) — and even a correct delta-based reading needs a minimum-bytes threshold, or ordinary OS housekeeping I/O triggers it every few seconds. |
+| Settings persistence | INI file (`hddsynth.ini`) via `GetPrivateProfileString`/`WritePrivateProfileString`, not the registry | Keeps the app self-contained the same way `samples/` already is — no install/uninstall registry cleanup, and it's the period-correct pattern for the era. |
+| Sample pack switching | Live swap under a `CRITICAL_SECTION` in the mixer, not a full restart | The three `WavPcm` buffers are compound state (pointer+count+rate) that can't be swapped atomically with a single `Interlocked` op the way the existing `g_accessActive` flag can — a lock is the honest way to let the GUI thread (menu click) replace what the audio thread is mid-mix on without tearing. |
 | Language | C++, conservative subset | No STL threading (`std::thread`/`std::mutex`) — MinGW's `winpthreads` backend calls synchronization primitives that don't exist on Win95. Plain Win32 primitives (`_beginthreadex`, `CRITICAL_SECTION`/`Interlocked*`) instead. |
 
 ## Toolchain
@@ -153,6 +175,16 @@ so they're recorded here rather than just in commit history:
   first read onward and useless as a signal; only the *delta* between consecutive polls
   indicates whether anything happened in between, and even that needs a minimum-bytes
   threshold or ordinary background I/O reads as constant "activity".
+- **`.rc` files need `#include <windows.h>` too**, not just `.cpp` files — without it, `WS_POPUP`,
+  `DS_MODALFRAME`, and friends are just undefined macros as far as the resource compiler's
+  preprocessor is concerned, and `windres` fails with a bare "syntax error" pointing at the
+  `STYLE` line, not a missing-macro complaint that would've been easier to place.
+- **Relying on the current working directory for relative paths doesn't hold up once there's
+  more than one file to find.** It happened to work for `samples\...` when launched by
+  double-clicking in Explorer, but broke down once an INI file and a directory *scan* (for
+  sample packs) were added too — `GetPrivateProfileString` in particular looks in the Windows
+  directory, not the CWD, if given a bare filename. Fixed by resolving everything relative to
+  the exe's own directory via `GetModuleFileNameA` (`src/paths.cpp`) instead.
 
 ## Open items
 
@@ -169,3 +201,7 @@ so they're recorded here rather than just in commit history:
   MinGW.org line, or TDM-GCC 4.7.1/4.9.2).
 - **No installer/packaging yet** — currently just a folder (`hddsynth.exe` + `samples/`)
   copied onto the target machine; `hddsynth.exe` expects `samples\` alongside it.
+- **About/Settings/Sample-pack-switching are newly built and not yet run on real hardware** —
+  verified statically (compiles clean, correct DLL/symbol set, zero CMOV/RDTSC/CPUID) but the
+  dialogs, trackbar rendering, live volume/balance changes, and pack switching all need an
+  actual Win9x test pass, the same as every other feature so far.

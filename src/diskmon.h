@@ -15,8 +15,13 @@
 // this does NOT mean a usable counter was found yet -- that's decided at
 // poll time, since HKEY_DYN_DATA only exists once the OS is actually
 // Windows 9x, not on this dev machine.
-bool StartDiskActivityMonitor(HWND hwnd);
+bool StartDiskActivityMonitor(HWND hwnd, int activityThresholdBytes);
 
 void StopDiskActivityMonitor();
+
+// Bytes per poll interval (~150ms) a counter must move by to count as
+// real activity rather than background noise. Safe to call any time;
+// takes effect on the monitor thread's next poll.
+void SetDiskActivityThreshold(int thresholdBytes);
 
 #endif

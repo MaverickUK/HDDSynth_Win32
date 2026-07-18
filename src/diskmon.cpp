@@ -39,10 +39,10 @@ static const CounterCandidate CANDIDATES[] = {
 #define NUM_CANDIDATES (sizeof(CANDIDATES) / sizeof(CANDIDATES[0]))
 
 // Bytes per POLL_INTERVAL_MS a counter must have moved by to count as
-// real activity, not background noise. 2KB/150ms is ~13KB/s sustained --
-// comfortably below "copying a file" territory, well above typical idle
-// housekeeping I/O.
-#define ACTIVITY_BYTE_THRESHOLD 2048
+// real activity, not background noise. Default (2KB/150ms, ~13KB/s
+// sustained) is comfortably below "copying a file" territory, well above
+// typical idle housekeeping I/O; user-configurable via Settings.
+static volatile LONG g_activityThresholdBytes = 2048;
 
 static char g_confirmedNames[MAX_COUNTERS][128];
 static int g_numConfirmed = 0;
@@ -134,7 +134,8 @@ static unsigned __stdcall PollThreadProc(void *) {
             // Unsigned subtraction handles a single 32-bit wraparound
             // correctly; the first read for a counter has nothing to
             // compare against yet, so it never claims activity on its own.
-            if (g_havePrevValue[i] && (value - g_prevValue[i]) > ACTIVITY_BYTE_THRESHOLD) {
+            LONG threshold = InterlockedExchangeAdd(&g_activityThresholdBytes, 0);
+            if (g_havePrevValue[i] && (LONG)(value - g_prevValue[i]) > threshold) {
                 sawActivity = TRUE;
             }
             g_prevValue[i] = value;
@@ -161,9 +162,10 @@ static unsigned __stdcall PollThreadProc(void *) {
     return 0;
 }
 
-bool StartDiskActivityMonitor(HWND hwnd) {
+bool StartDiskActivityMonitor(HWND hwnd, int activityThresholdBytes) {
     g_hwnd = hwnd;
     g_stopRequested = 0;
+    g_activityThresholdBytes = activityThresholdBytes;
     // _beginthreadex, not CreateThread: any thread running alongside CRT
     // usage elsewhere in the process needs the CRT's own per-thread init
     // (errno, stdio buffers, ...), or risks silent corruption/hangs rather
@@ -180,4 +182,8 @@ void StopDiskActivityMonitor() {
         CloseHandle(g_thread);
         g_thread = NULL;
     }
+}
+
+void SetDiskActivityThreshold(int thresholdBytes) {
+    InterlockedExchange(&g_activityThresholdBytes, thresholdBytes);
 }

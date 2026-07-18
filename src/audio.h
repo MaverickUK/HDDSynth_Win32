@@ -14,11 +14,21 @@
 // the GUI message queue for a second or more, and that's exactly when
 // this app most needs to keep playing.
 bool InitAudio(HWND hwnd, const char *spinupWavPath, const char *idleWavPath,
-                const char *accessWavPath);
+                const char *accessWavPath, int volume, int balance, int minPlaybackMs);
 
-// Thin pass-through to the mixer, so callers only need to depend on
-// audio.h once the disk-activity monitor is wired in.
+// Thin pass-throughs to the mixer, so callers only need to depend on
+// audio.h.
 void SetAudioAccessActive(BOOL active);
+void SetAudioVolume(int volume);
+void SetAudioBalance(int balance);
+void SetAudioMinPlaybackMs(int ms);
+
+// Switches to a different sample pack's WAVs live (see
+// MixerSwitchSamplePack), reopening the waveOut device first if the new
+// pack's sample rate differs from the one currently playing. Returns
+// false (leaving the current pack in place) if any file fails to load.
+bool SwitchAudioSamplePack(const char *spinupWavPath, const char *idleWavPath,
+                            const char *accessWavPath);
 
 void ShutdownAudio();
 

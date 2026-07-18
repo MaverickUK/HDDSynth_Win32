@@ -1,4 +1,43 @@
+#include <windows.h>
 #include "../src/resource.h"
 
 IDI_GRAY  ICON "gray.ico"
 IDI_GREEN ICON "green.ico"
+
+IDD_ABOUT DIALOG 0, 0, 200, 100
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "About HDD Synth Win9x"
+FONT 8, "MS Sans Serif"
+BEGIN
+    ICON      IDI_GRAY, IDC_ABOUT_ICON, 10, 10, 20, 20
+    LTEXT     "HDD Synth Win9x", IDC_ABOUT_APPNAME, 45, 10, 145, 10
+    LTEXT     "", IDC_ABOUT_VERSION, 45, 24, 145, 10
+    LTEXT     "By Peter Bridger", IDC_ABOUT_AUTHOR, 45, 38, 145, 10
+    LTEXT     "", IDC_ABOUT_LINK, 45, 52, 145, 10, SS_NOTIFY
+    DEFPUSHBUTTON "OK", IDOK, 75, 78, 50, 14
+END
+
+IDD_SETTINGS DIALOG 0, 0, 220, 170
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "HDD Synth Settings"
+FONT 8, "MS Sans Serif"
+BEGIN
+    LTEXT     "Volume", -1, 10, 10, 60, 10
+    CONTROL   "", IDC_VOLUME_SLIDER, "msctls_trackbar32", 0x00000001, 10, 22, 150, 15
+    LTEXT     "", IDC_VOLUME_LABEL, 165, 24, 45, 10
+
+    LTEXT     "Balance", -1, 10, 44, 60, 10
+    CONTROL   "", IDC_BALANCE_SLIDER, "msctls_trackbar32", 0x00000001, 10, 56, 150, 15
+    LTEXT     "", IDC_BALANCE_LABEL, 165, 58, 45, 10
+    LTEXT     "Idle", -1, 10, 72, 30, 10
+    RTEXT     "Activity", -1, 120, 72, 40, 10
+
+    LTEXT     "Minimum access playback (ms)", -1, 10, 92, 130, 10
+    EDITTEXT  IDC_MINPLAY_EDIT, 145, 90, 50, 12, ES_NUMBER | ES_AUTOHSCROLL
+
+    LTEXT     "Activity threshold (bytes/poll)", -1, 10, 108, 130, 10
+    EDITTEXT  IDC_THRESHOLD_EDIT, 145, 106, 50, 12, ES_NUMBER | ES_AUTOHSCROLL
+
+    DEFPUSHBUTTON "OK", IDOK, 55, 145, 50, 14
+    PUSHBUTTON    "Cancel", IDCANCEL, 115, 145, 50, 14
+END
