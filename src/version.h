@@ -10,7 +10,7 @@
 
 #define HDDSYNTH_APP_NAME "HDD Synth Win32"
 #define HDDSYNTH_AUTHOR "Peter Bridger"
-#define HDDSYNTH_GITHUB_URL "https://github.com/MaverickUK/HDDSynth_Win9x"
+#define HDDSYNTH_GITHUB_URL "https://github.com/MaverickUK/HDDSynth_Win32"
 
 // HDDSYNTH_TARGET_NT is defined by the Makefile's NT_CXXFLAGS (only for
 // the hddsynth-nt.exe build) -- see "Two builds, one codebase" in
