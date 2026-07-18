@@ -23,6 +23,7 @@ cross-compilation and verified in rounds against my real Windows 98 hardware.
 Versioned with SemVer (`src/version.h`) — pre-1.0 since this hasn't been released yet; I bump
 it with each change.
 
+## Demo video
 [![Demo video](https://img.youtube.com/vi/oLoJ0eOow08/maxresdefault.jpg)](https://www.youtube.com/watch?v=oLoJ0eOow08)
 
 ## Behavior
