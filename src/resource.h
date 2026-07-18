@@ -24,5 +24,6 @@
 #define IDC_THRESHOLD_EDIT   1206
 #define IDC_BUFFER_SLIDER    1207
 #define IDC_BUFFER_LABEL     1208
+#define IDC_APPLY_BUTTON     1209
 
 #endif

@@ -38,9 +38,12 @@ it with each change.
 - Right-click the tray icon for:
   - **Sample** — a submenu listing every subfolder under `samples\` (each a self-contained
     sample pack); picking one switches live, no restart needed.
-  - **Settings...** — volume, idle/activity balance, audio buffering (see note below),
-    minimum access playback time, and the activity detection threshold, persisted to
-    `hddsynth.ini` next to the exe.
+  - **Settings...** — volume, idle/activity balance (0 = idle only, 100 = access only, 50 =
+    even), audio buffering (see note below), minimum access playback time, and the activity
+    detection threshold, persisted to `hddsynth.ini` next to the exe. An Apply button commits
+    changes live without closing the dialog, for quickly trying several settings in a row
+    against the same real activity (e.g. a large background copy) — Cancel afterward doesn't
+    undo whatever was already Applied, same as any other Win32 dialog with an Apply button.
   - **About...** — Win9x-style about box with the project logo, version, which build you're
     running (Windows 95/98/ME vs Windows 2000/XP+), author, and a link to the project page.
   - **Exit**.
@@ -274,6 +277,14 @@ so I've recorded them here rather than leaving them buried in commit history:
   `<pdhmsg.h>`, not `<pdh.h>`** — including only `<pdh.h>` (which declares the functions/types)
   compiles fine right up until you reference one of those constants, at which point it's an
   undeclared-identifier error rather than a missing-include one.
+- **The Balance slider used to floor each side at 50%, so it could never fully mute either
+  layer** (`idleWeightX100 = 150 - balance`, `accessWeightX100 = 50 + balance` — at balance=100
+  that's still 50% idle, not 0%). That was a deliberate choice at the time (never silence a
+  layer via balance alone), but it directly contradicted what the slider's own end labels
+  ("Idle"/"Activity") imply, and a user reported exactly that — setting Activity to 100 still
+  left idle audible. Fixed to a straight linear crossfade (`100 - balance` / `balance`) so the
+  extremes actually reach full mute, at the cost of each layer only being at 50% (not 100%) at
+  the center — Volume still scales the combined result if that reads as quieter overall.
 
 ## Open items
 

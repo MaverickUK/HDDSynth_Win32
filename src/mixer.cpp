@@ -83,11 +83,18 @@ void MixerFillBuffer(short *out, size_t count) {
     EnterCriticalSection(&g_lock);
 
     int volume = g_volume;
-    // idleWeightX100/accessWeightX100 range 50..150 as balance sweeps
-    // 100..0 / 0..100 -- 50 = equal weight either side of the 50/50
-    // center, so neither layer is ever silenced by balance alone.
-    int idleWeightX100 = 150 - g_balance;
-    int accessWeightX100 = 50 + g_balance;
+    // Straight linear crossfade: idle at 100% / access at 0% when
+    // balance=0 ("Idle" end), the reverse at balance=100 ("Activity"
+    // end), 50/50 at center. Previously this floored each side at 50%
+    // (never fully silencing either layer) so that neither could be
+    // muted by balance alone -- but that meant balance=100 still left
+    // idle audible, which is exactly backwards from what the slider
+    // labels ("Idle" / "Activity") imply and what a user reasonably
+    // expects. Master Volume still scales the combined result, so
+    // overall loudness at the 50/50 center can be compensated there if
+    // it feels quieter than before.
+    int idleWeightX100 = 100 - g_balance;
+    int accessWeightX100 = g_balance;
 
     for (size_t i = 0; i < count; i++) {
         if (g_phase == PHASE_SPINUP) {

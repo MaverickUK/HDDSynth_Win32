@@ -1,9 +1,18 @@
 // Settings dialog: three trackbar sliders (volume, balance, audio
 // buffering) plus two edit fields for the less frequently touched
-// tunables (min playback time, activity threshold). Trackbar is a common
-// control (comctl32.dll, present on Win95+) -- InitCommonControls() must
-// be called once before any dialog containing one is created (done in
-// tray.cpp's WinMain).
+// tunables (min playback time, activity threshold), plus an Apply button
+// alongside OK/Cancel so changes can be tried live without closing the
+// dialog -- handy for A/B-testing settings against something like a large
+// background file copy. Trackbar is a common control (comctl32.dll,
+// present on Win95+) -- InitCommonControls() must be called once before
+// any dialog containing one is created (done in tray.cpp's WinMain).
+//
+// Apply and OK do the exact same "read controls, save, apply live" work
+// (ReadControlsIntoSettings + ApplySettingsLive below); the only
+// difference is Apply leaves the dialog open and OK closes it. Like every
+// other Win32 dialog with an Apply button, clicking it commits
+// immediately -- Cancel afterward does not roll back whatever was already
+// applied, only whatever's been changed in the controls since.
 #include "settings_dialog.h"
 #include "resource.h"
 #include "audio.h"
@@ -26,6 +35,31 @@ static void UpdateBufferLabel(HWND hDlg, int pos) {
     char buf[16];
     wsprintfA(buf, "%dms", pos);
     SetDlgItemTextA(hDlg, IDC_BUFFER_LABEL, buf);
+}
+
+static void ReadControlsIntoSettings(HWND hDlg, Settings *s) {
+    s->volume = (int)SendMessageA(GetDlgItem(hDlg, IDC_VOLUME_SLIDER), TBM_GETPOS, 0, 0);
+    s->balance = (int)SendMessageA(GetDlgItem(hDlg, IDC_BALANCE_SLIDER), TBM_GETPOS, 0, 0);
+    s->audioBufferMs = (int)SendMessageA(GetDlgItem(hDlg, IDC_BUFFER_SLIDER), TBM_GETPOS, 0, 0);
+
+    BOOL ok;
+    int minPlay = GetDlgItemInt(hDlg, IDC_MINPLAY_EDIT, &ok, FALSE);
+    if (ok) {
+        s->minPlaybackMs = minPlay;
+    }
+    int threshold = GetDlgItemInt(hDlg, IDC_THRESHOLD_EDIT, &ok, FALSE);
+    if (ok) {
+        s->activityThresholdBytes = threshold;
+    }
+}
+
+static void ApplySettingsLive(const Settings *s) {
+    SaveSettings(s);
+    SetAudioVolume(s->volume);
+    SetAudioBalance(s->balance);
+    SetAudioMinPlaybackMs(s->minPlaybackMs);
+    SetDiskActivityThreshold(s->activityThresholdBytes);
+    SetAudioBufferMs(s->audioBufferMs);
 }
 
 static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
@@ -71,21 +105,14 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
         case WM_COMMAND:
             if (LOWORD(wp) == IDOK) {
                 Settings *s = (Settings *)GetWindowLongPtrA(hDlg, GWLP_USERDATA);
-                s->volume = (int)SendMessageA(GetDlgItem(hDlg, IDC_VOLUME_SLIDER), TBM_GETPOS, 0, 0);
-                s->balance = (int)SendMessageA(GetDlgItem(hDlg, IDC_BALANCE_SLIDER), TBM_GETPOS, 0, 0);
-                s->audioBufferMs = (int)SendMessageA(GetDlgItem(hDlg, IDC_BUFFER_SLIDER), TBM_GETPOS, 0, 0);
-
-                BOOL ok;
-                int minPlay = GetDlgItemInt(hDlg, IDC_MINPLAY_EDIT, &ok, FALSE);
-                if (ok) {
-                    s->minPlaybackMs = minPlay;
-                }
-                int threshold = GetDlgItemInt(hDlg, IDC_THRESHOLD_EDIT, &ok, FALSE);
-                if (ok) {
-                    s->activityThresholdBytes = threshold;
-                }
-
+                ReadControlsIntoSettings(hDlg, s);
+                ApplySettingsLive(s);
                 EndDialog(hDlg, IDOK);
+                return TRUE;
+            } else if (LOWORD(wp) == IDC_APPLY_BUTTON) {
+                Settings *s = (Settings *)GetWindowLongPtrA(hDlg, GWLP_USERDATA);
+                ReadControlsIntoSettings(hDlg, s);
+                ApplySettingsLive(s);
                 return TRUE;
             } else if (LOWORD(wp) == IDCANCEL) {
                 EndDialog(hDlg, IDCANCEL);
@@ -99,15 +126,9 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
 bool ShowSettingsDialog(HWND parent, HINSTANCE hInst, Settings *s) {
     INT_PTR result = DialogBoxParamA(hInst, MAKEINTRESOURCEA(IDD_SETTINGS), parent,
                                        SettingsDlgProc, (LPARAM)s);
-    if (result != IDOK) {
-        return false;
-    }
-
-    SaveSettings(s);
-    SetAudioVolume(s->volume);
-    SetAudioBalance(s->balance);
-    SetAudioMinPlaybackMs(s->minPlaybackMs);
-    SetDiskActivityThreshold(s->activityThresholdBytes);
-    SetAudioBufferMs(s->audioBufferMs);
-    return true;
+    // Settings are already saved/applied inside the dialog proc on both
+    // OK and Apply -- nothing left to do here except report whether the
+    // user closed it via OK (Cancel does not undo an earlier Apply, same
+    // as every other Win32 dialog with an Apply button).
+    return result == IDOK;
 }
