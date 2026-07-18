@@ -1,0 +1,7 @@
+#ifndef HDDSYNTH_RESOURCE_H
+#define HDDSYNTH_RESOURCE_H
+
+#define IDI_GRAY  101
+#define IDI_GREEN 102
+
+#endif
