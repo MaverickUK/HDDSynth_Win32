@@ -1,6 +1,10 @@
 # Build output
 build/
 
+# Release packaging (tools/release.sh) -- these get attached to GitHub
+# releases, not committed
+/HDDSynth-Win32-v*.zip
+
 # macOS
 .DS_Store
 

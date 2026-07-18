@@ -25,8 +25,11 @@ static BOOL CALLBACK AboutDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
             }
 
             char buf[64];
+            SetWindowTextA(hDlg, HDDSYNTH_APP_NAME);
+            SetDlgItemTextA(hDlg, IDC_ABOUT_APPNAME, HDDSYNTH_APP_NAME);
             wsprintfA(buf, "Version %s", HDDSYNTH_VERSION_STRING);
             SetDlgItemTextA(hDlg, IDC_ABOUT_VERSION, buf);
+            SetDlgItemTextA(hDlg, IDC_ABOUT_BUILD, HDDSYNTH_BUILD_NAME);
             SetDlgItemTextA(hDlg, IDC_ABOUT_LINK, HDDSYNTH_GITHUB_URL);
 
             HWND hLink = GetDlgItem(hDlg, IDC_ABOUT_LINK);

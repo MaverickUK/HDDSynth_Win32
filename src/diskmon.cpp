@@ -1,3 +1,8 @@
+// Windows 9x/ME implementation of diskmon.h -- see diskmon_nt.cpp for the
+// Windows 2000/XP+ counterpart, which uses PDH instead and is
+// substantially simpler as a direct result of NT having a documented,
+// rate-based counters API where Win9x has neither.
+//
 // Disk activity detection via HKEY_DYN_DATA\PerfStats -- the same
 // real-time performance data System Monitor (sysmon.exe) reads on
 // Windows 95/98/ME (there's no modern IoCounters-style API on this OS).

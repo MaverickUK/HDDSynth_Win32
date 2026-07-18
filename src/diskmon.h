@@ -9,18 +9,26 @@
 // (not sent) so the poll thread never blocks on the UI thread.
 #define WM_DISKACTIVITY (WM_APP + 2)
 
-// Starts a background thread polling HKEY_DYN_DATA\PerfStats for
-// system-wide disk activity (see diskmon.cpp for why the exact counter
-// names are still provisional). Returns true if the thread was created;
-// this does NOT mean a usable counter was found yet -- that's decided at
-// poll time, since HKEY_DYN_DATA only exists once the OS is actually
-// Windows 9x, not on this dev machine.
+// This interface has two implementations, picked at build time (see
+// Makefile): diskmon.cpp for Windows 9x/ME (HKEY_DYN_DATA\PerfStats,
+// undocumented, cumulative counters needing manual delta/threshold
+// tracking -- see its file header for the full story) and diskmon_nt.cpp
+// for Windows 2000/XP+ (PDH, documented, already rate-based). Everything
+// else in the app (tray.cpp, mixer.cpp, ...) only depends on this header,
+// not on which one is linked in.
+
+// Starts a background thread polling for system-wide disk activity.
+// Returns true if the thread was created; this does NOT guarantee
+// detection is actually working yet on this specific machine -- see each
+// implementation's file header for what can still go wrong per-OS.
 bool StartDiskActivityMonitor(HWND hwnd, int activityThresholdBytes);
 
 void StopDiskActivityMonitor();
 
-// Bytes per poll interval (~150ms) a counter must move by to count as
-// real activity rather than background noise. Safe to call any time;
+// Threshold a counter's movement must exceed per poll to count as real
+// activity rather than background noise. Units/semantics are documented
+// per implementation (see each diskmon_*.cpp) since the underlying
+// counters aren't measuring quite the same thing. Safe to call any time;
 // takes effect on the monitor thread's next poll.
 void SetDiskActivityThreshold(int thresholdBytes);
 

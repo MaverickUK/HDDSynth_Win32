@@ -5,17 +5,27 @@ IDI_GRAY  ICON "gray.ico"
 IDI_GREEN ICON "green.ico"
 IDB_LOGO  BITMAP "hddsynthlogo.bmp"
 
-IDD_ABOUT DIALOG 0, 0, 220, 172
+// Resource type 24 = RT_MANIFEST, ID 1 = CREATEPROCESS_MANIFEST_RESOURCE_ID
+// (used as raw numbers rather than the symbolic names since those aren't
+// guaranteed available at .rc preprocessing time). Enables XP visual
+// styles (themed common controls) via the Microsoft.Windows.Common-
+// Controls v6 dependency declared in hddsynth.manifest. Harmless on
+// Win9x, which doesn't process manifests at all -- shared between both
+// build targets, no #ifdef needed.
+1 24 "hddsynth.manifest"
+
+IDD_ABOUT DIALOG 0, 0, 220, 184
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "About HDD Synth Win9x"
+CAPTION "About HDD Synth Win32"
 FONT 8, "MS Sans Serif"
 BEGIN
     CONTROL   "", IDC_ABOUT_LOGO, "STATIC", SS_BITMAP, 50, 8, 110, 76
-    CTEXT     "HDD Synth Win9x", IDC_ABOUT_APPNAME, 10, 88, 200, 10
+    CTEXT     "HDD Synth Win32", IDC_ABOUT_APPNAME, 10, 88, 200, 10
     CTEXT     "", IDC_ABOUT_VERSION, 10, 100, 200, 10
-    CTEXT     "By Peter Bridger", IDC_ABOUT_AUTHOR, 10, 112, 200, 10
-    CTEXT     "", IDC_ABOUT_LINK, 10, 124, 200, 10, SS_NOTIFY
-    DEFPUSHBUTTON "OK", IDOK, 85, 145, 50, 14
+    CTEXT     "", IDC_ABOUT_BUILD, 10, 112, 200, 10
+    CTEXT     "By Peter Bridger", IDC_ABOUT_AUTHOR, 10, 124, 200, 10
+    CTEXT     "", IDC_ABOUT_LINK, 10, 136, 200, 10, SS_NOTIFY
+    DEFPUSHBUTTON "OK", IDOK, 85, 157, 50, 14
 END
 
 IDD_SETTINGS DIALOG 0, 0, 220, 205

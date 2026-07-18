@@ -7,11 +7,12 @@
 # What it does, in order:
 #   1. Reads the version string from src/version.h (single source of truth --
 #      bump that file first, this script doesn't decide the version for you).
-#   2. Clean release build (make clean && make), with the same static
-#      Win95-safety checks used throughout development (zero CMOV/RDTSC/
-#      CPUID, expected DLL import set only).
-#   3. Packages build/hddsynth.exe + samples/ into a self-contained folder
-#      inside a zip, so extracting it gives something immediately runnable.
+#   2. Clean release build of both targets (make clean && make && make nt),
+#      with the same static Win95-safety checks used throughout development
+#      for the Win9x build (zero CMOV/RDTSC/CPUID, expected DLL import set).
+#   3. Packages build/hddsynth.exe + build/hddsynth-nt.exe + samples/ into a
+#      self-contained folder inside a zip, so extracting it gives something
+#      immediately runnable on whichever OS family it's used on.
 #   4. Tags the current commit vX.Y.Z and pushes main + the tag.
 #   5. Creates a GitHub release from that tag via `gh`, attaching the zip.
 #
@@ -53,6 +54,7 @@ fi
 echo "--- Building ---"
 make clean
 make
+make nt
 
 DISASM=$(mktemp)
 i686-w64-mingw32-objdump -d build/hddsynth.exe > "$DISASM"
@@ -62,14 +64,20 @@ if [ "$BAD_INSNS" != "0" ]; then
     echo "Found $BAD_INSNS disallowed instruction(s) (cmov/rdtsc/cpuid) in build/hddsynth.exe -- aborting." >&2
     exit 1
 fi
-echo "Static safety check passed: 0 cmov/rdtsc/cpuid instructions."
+echo "Static safety check passed: 0 cmov/rdtsc/cpuid instructions in build/hddsynth.exe."
+
+if [ ! -f build/hddsynth-nt.exe ]; then
+    echo "build/hddsynth-nt.exe missing after 'make nt' -- aborting." >&2
+    exit 1
+fi
 
 echo "--- Packaging ---"
 STAGE_DIR=$(mktemp -d)
-PACKAGE_NAME="HDDSynth-Win9x-$TAG"
+PACKAGE_NAME="HDDSynth-Win32-$TAG"
 PACKAGE_DIR="$STAGE_DIR/$PACKAGE_NAME"
 mkdir -p "$PACKAGE_DIR"
 cp build/hddsynth.exe "$PACKAGE_DIR/"
+cp build/hddsynth-nt.exe "$PACKAGE_DIR/"
 cp -R samples "$PACKAGE_DIR/samples"
 find "$PACKAGE_DIR" -name ".DS_Store" -delete
 

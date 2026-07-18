@@ -1,20 +1,29 @@
-# HDDSynth-Win9x
+# HDDSynth-Win32
 
-A pure-software reimplementation of [HDDSynth](https://github.com/MaverickUK/HDDSynth) for Windows 95/98/ME.
+A pure-software reimplementation of [HDDSynth](https://github.com/MaverickUK/HDDSynth) for
+32-bit Windows, from Windows 95 through XP.
 
 The original HDDSynth is a Raspberry Pi Pico-based hardware device I built that reads a PC's
 physical HDD LED wire and plays back mechanical-drive sound samples. I wanted a version that
-drops the hardware entirely: a small Windows 9x system tray application that watches for disk
+drops the hardware entirely: a small Windows system tray application that watches for disk
 activity in software and plays the same sample-based audio, so you get authentic spinning-HDD
 sound (and a gray/green tray icon) on a machine that's actually running a solid-state drive —
 no wiring required.
 
-This was built with [Claude Code](https://claude.com/claude-code) — I don't have a Windows 9x
-box handy for day-to-day compiling, so the whole thing was developed on macOS via cross-
-compilation and verified in rounds against my real Windows 98 hardware.
+This was built with [Claude Code](https://claude.com/claude-code) — developed on macOS via
+cross-compilation and verified in rounds against my real Windows 98 hardware.
 
-**Status**: working end-to-end, confirmed on real Windows 98 hardware. Versioned with SemVer
-(`src/version.h`) — pre-1.0 since I haven't released it yet; I bump it with each change.
+**Status**: two builds from one codebase.
+- **`hddsynth.exe`** (Windows 95/98/ME) — working end-to-end, confirmed on real Windows 98
+  hardware, through many rounds of real-hardware testing (see Gotchas below).
+- **`hddsynth-nt.exe`** (Windows 2000/XP+) — builds and links cleanly, verified statically only.
+  I don't have any NT-family hardware to test it on, unlike the Win9x build, so treat it as
+  unverified until someone confirms it actually runs. See "Two builds, one codebase" below.
+
+Versioned with SemVer (`src/version.h`) — pre-1.0 since this hasn't been released yet; I bump
+it with each change.
+
+[![Demo video](https://img.youtube.com/vi/oLoJ0eOow08/maxresdefault.jpg)](https://www.youtube.com/watch?v=oLoJ0eOow08)
 
 ## Behavior
 
@@ -32,8 +41,8 @@ compilation and verified in rounds against my real Windows 98 hardware.
   - **Settings...** — volume, idle/activity balance, audio buffering (see note below),
     minimum access playback time, and the activity detection threshold, persisted to
     `hddsynth.ini` next to the exe.
-  - **About...** — Win9x-style about box with the project logo, version, author, and a link
-    to the project page.
+  - **About...** — Win9x-style about box with the project logo, version, which build you're
+    running (Windows 95/98/ME vs Windows 2000/XP+), author, and a link to the project page.
   - **Exit**.
 - Runs quietly in the background alongside other software — event-driven audio thread that's
   fully asleep between buffer refills, sleep-based poll loop for disk detection, no busy-
@@ -53,6 +62,34 @@ If a particular machine hits this a lot, check whether Windows considers its dis
 in DMA mode (see Open items below) — that's the actual underlying cause, not something this app
 can fix.
 
+## Two builds, one codebase
+
+`hddsynth.exe` (Win9x) and `hddsynth-nt.exe` (Windows 2000/XP+) share every line of application
+logic — tray icon, mixer, WAV loading, settings, dialogs, sample packs (`src/tray.cpp` through
+`src/paths.cpp` below). The **only** file that differs is the disk-activity monitor, because
+Win9x and NT expose completely different (and non-overlapping) APIs for it:
+
+- `src/diskmon.cpp` (Win9x) polls `HKEY_DYN_DATA\PerfStats`, a Win9x/ME-only pseudo-registry
+  with undocumented counter names and counters that are cumulative totals rather than rates
+  (see Gotchas).
+- `src/diskmon_nt.cpp` (2000/XP+) uses PDH (Performance Data Helper, `pdh.dll` — shipped with
+  every NT-family Windows since NT4) to read `\PhysicalDisk(_Total)\Disk Bytes/sec`, which is
+  documented and already a rate — no delta-tracking needed, though it still gets thresholded the
+  same way to filter background noise.
+
+Both implement the same `src/diskmon.h` interface (`StartDiskActivityMonitor`/
+`StopDiskActivityMonitor`/`SetDiskActivityThreshold`, posting `WM_DISKACTIVITY`), so nothing
+else in the app knows or cares which OS family it's running on. The `Makefile` picks the right
+one per target — see `make nt` under Toolchain.
+
+I don't have Windows 2000/XP hardware (or even a VM) to test `hddsynth-nt.exe` against, so
+unlike every other feature in this project it hasn't been through a real-hardware verification
+round — it's unverified beyond compiling and linking cleanly with the expected imports. One
+specific known gap: `PdhAddCounterA` takes the *localized* counter path ("PhysicalDisk"/"Disk
+Bytes/sec" are the English names) and will fail to resolve on a non-English Windows install; the
+locale-independent fix (looking counters up by numeric index via
+`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Perflib`) isn't implemented.
+
 ## Project layout
 
 ```
@@ -70,14 +107,15 @@ Makefile    Cross-compilation build rules
 | `src/audio.cpp` / `audio.h` | Owns the single `waveOut` stream and its dedicated refill thread |
 | `src/mixer.cpp` / `mixer.h` | Software PCM mixing: spin-up → idle loop → access layering, volume/balance, live pack swaps |
 | `src/wav.cpp` / `wav.h` | Minimal WAV/PCM loader |
-| `src/diskmon.cpp` / `diskmon.h` | Background thread polling `HKEY_DYN_DATA\PerfStats` for disk activity |
+| `src/diskmon.cpp` / `diskmon.h` | Win9x disk-activity monitor (`HKEY_DYN_DATA\PerfStats`) + the shared interface header |
+| `src/diskmon_nt.cpp` | Windows 2000/XP+ disk-activity monitor (PDH) — same interface, only one of the two is linked in per build |
 | `src/settings.cpp` / `settings.h` | `hddsynth.ini` load/save |
 | `src/settings_dialog.cpp` / `.h` | Settings dialog (volume/balance sliders, threshold/min-playback edits) |
 | `src/about_dialog.cpp` / `.h` | About box |
 | `src/samplepack.cpp` / `.h` | Scans `samples\` for pack subfolders, builds per-pack WAV paths |
 | `src/paths.cpp` / `.h` | Resolves paths relative to the exe's own directory, not the CWD |
 | `src/version.h` | SemVer + app name/author/GitHub URL, shown in the About box |
-| `src/spike_main.cpp` | Standalone toolchain-validation spike (not part of `hddsynth.exe`) |
+| `src/spike_main.cpp` | Standalone toolchain-validation spike (not part of either real build) |
 
 ## Samples
 
@@ -102,16 +140,21 @@ doesn't match the one currently playing).
 
 | Concern | Choice | Reasoning |
 |---|---|---|
-| Target OS | Windows 95, 98, ME | Broadest "Win9x" support; drives most constraints below. |
+| Target OS | Windows 95/98/ME (`hddsynth.exe`) and Windows 2000/XP+ (`hddsynth-nt.exe`), one codebase | Broadest realistic 32-bit Windows range. Only the disk-activity monitor differs per OS family (see "Two builds, one codebase" above) — everything else is shared unmodified. |
 | Audio | Manual PCM mixing over `winmm` (`waveOutOpen`/`waveOutWrite`), one output stream | DirectSound needs DirectX installed and adds a COM dependency. `winmm` ships with every Windows since 3.1. Opening *multiple* simultaneous `waveOutOpen` handles (one per sample) is a classic Win9x trap — cards without hardware mixing (common pre-98SE) reject the second handle. Mixing the layers myself in software and writing to a single stream sidesteps that. |
 | Buffer refills | Dedicated thread woken by a `CALLBACK_EVENT`, not `MM_WOM_DONE` on the GUI thread | The GUI-thread-message approach caused audible dropouts during heavy disk I/O — exactly when the app most needs to keep playing, since that's also when the GUI message queue is most likely to be delayed. |
 | Buffer depth | User-configurable (`audioBufferMs`, default 750ms; ~256ms-2048ms range), not a fixed constant | A buffer's content is fixed at generation time and has to wait behind whatever's already queued ahead of it — so total buffer depth is *both* the worst-case lag before a change is heard *and* how much of a driver/CPU stall (e.g. a PIO-mode disk transfer) the audio can absorb before going silent. Those two things trade directly against each other with no single right answer, so it's a Settings slider rather than my picking one number — see "A note on dropouts" above. |
 | Detection scope | System-wide (any drive), not a specific drive letter | Matches the original hardware's single-LED simplicity. |
-| Detection source | `HKEY_DYN_DATA\PerfStats\{StartStat,StatData,StopStat}` | Win9x has no modern disk-IO-counter API; this is the same real-time counter feed `sysmon.exe` reads. See Toolchain/gotchas for the two non-obvious things about it. |
-| Detection signal | Delta between polls of `VFAT\BReadsSec`/`BWritesSec`, thresholded | These counters are cumulative totals, not rates (see gotchas) — and even a correct delta-based reading needs a minimum-bytes threshold, or ordinary OS housekeeping I/O triggers it every few seconds. |
+| Detection source (Win9x) | `HKEY_DYN_DATA\PerfStats\{StartStat,StatData,StopStat}` | Win9x has no modern disk-IO-counter API; this is the same real-time counter feed `sysmon.exe` reads. See Toolchain/gotchas for the two non-obvious things about it. |
+| Detection signal (Win9x) | Delta between polls of `VFAT\BReadsSec`/`BWritesSec`, thresholded | These counters are cumulative totals, not rates (see gotchas) — and even a correct delta-based reading needs a minimum-bytes threshold, or ordinary OS housekeeping I/O triggers it every few seconds. |
+| Detection source (2000/XP+) | PDH, `\PhysicalDisk(_Total)\Disk Bytes/sec` | Documented, always-present since NT4, and `_Total` gives the same system-wide "any drive" scope with no per-instance enumeration needed. |
+| Detection signal (2000/XP+) | Raw formatted value, thresholded | PDH computes the rate between successive `PdhCollectQueryData` calls itself — no manual delta-tracking, unlike Win9x. Still thresholded for the same reason (filtering background I/O). |
 | Settings persistence | INI file (`hddsynth.ini`) via `GetPrivateProfileString`/`WritePrivateProfileString`, not the registry | Keeps the app self-contained the same way `samples/` already is — no install/uninstall registry cleanup, and it's the period-correct pattern for the era. |
 | Sample pack switching | Live swap under a `CRITICAL_SECTION` in the mixer, not a full restart | The three `WavPcm` buffers are compound state (pointer+count+rate) that can't be swapped atomically with a single `Interlocked` op the way the existing `g_accessActive` flag can — a lock is the honest way to let the GUI thread (menu click) replace what the audio thread is mid-mix on without tearing. |
 | About box logo | Converted to a 24-bit BITMAP resource, not embedded as PNG | Classic Win9x GDI has no PNG support and BITMAP resources carry no alpha channel, so `tools/make_about_logo.py` composites the source PNG onto the classic Win95 dialog face gray and resizes it before conversion. |
+| About box build label | `HDDSYNTH_BUILD_NAME` (`version.h`), driven by a `HDDSYNTH_TARGET_NT` macro the `Makefile` defines only for the NT target | The two `.exe`s look and behave identically otherwise; this makes it obvious at a glance which one is actually running without having to check the filename. |
+| XP visual styles | Embedded manifest (`res/hddsynth.manifest`, `RT_MANIFEST` resource in the shared `.rc`) declaring the `Microsoft.Windows.Common-Controls` v6 dependency | Themes the Settings dialog's sliders/buttons with XP's native look. Lives in the shared resource script, not gated by `HDDSYNTH_TARGET_NT` — Win9x's loader doesn't process manifests at all, so it's silently inert there. |
+| Tray icons | 32bpp with real per-pixel alpha (`tools/make_icons.py`), not the classic 24bpp/1-bit-mask format used everywhere else in this project | Windows 2000+ renders the alpha channel directly for genuinely smooth anti-aliased edges; Win9x-era shell32 ignores alpha and falls back to a mask thresholded from it, giving the same hard-edged look as before — one asset serves both targets' rendering ceiling. |
 | Language | C++, conservative subset | No STL threading (`std::thread`/`std::mutex`) — MinGW's `winpthreads` backend calls synchronization primitives that don't exist on Win95. Plain Win32 primitives (`_beginthreadex`, `CRITICAL_SECTION`/`Interlocked*`) instead. |
 
 ## Toolchain
@@ -120,33 +163,41 @@ Built on macOS (also works on Windows 11/Linux) using a cross-compiler — no Wi
 IDE or VM needed just to *build* the code, only to *run and test* it.
 
 - **Compiler**: `mingw-w64` via Homebrew (`brew install mingw-w64`), targeting `i686-w64-mingw32`.
-- **Critical flag**: `-mcrtdll=msvcrt-os`. Modern mingw-w64 (this build is GCC 16) defaults to
-  linking against the Universal CRT (`api-ms-win-crt-*.dll`), which only exists on Windows 10+
-  and silently fails to load on Win9x. `-mcrtdll=msvcrt-os` forces linking against the real,
-  always-present `msvcrt.dll` instead.
-- **CPU target**: `-march=pentium -mtune=pentium`, so the binary never emits an instruction
-  the original Pentium (and thus the oldest realistic Win95 boxes) can't execute.
-- **Custom Pentium-safe CRT** (`tools/build-pentium-crt.sh`): Homebrew's mingw-w64 ships its
-  CRT startup objects and static support libs (`crt2.o`, `libmingw32.a`, `libmingwex.a`, ...)
-  *prebuilt* for a P6+ CPU baseline, containing `cmove`/`cmovne` instructions — my own
-  `-march=pentium` only affects code I compile, not these prebuilt archives. On a real/
-  emulated Pentium (no CMOV) that's an illegal-instruction crash at startup, before `main` is
-  even reached (this is exactly what the first real-hardware test hit). The script rebuilds
-  just those pieces from the matching mingw-w64 source release with `-march=pentium`, installs
-  them to `/tmp/mingw-pentium-sysroot`, and the `Makefile` prefers them via `-B`/`-L`.
-- **Threading**: `-no-pthread`, since GCC otherwise links `libpthread`/`winpthreads` into every
-  binary by default, whether or not the code uses threads — and that library's init path isn't
-  Win95-safe.
-- **Static linking**: `-static -static-libgcc -static-libstdc++`, so the only DLLs the exe
-  depends on are the ones Windows itself ships (`kernel32`, `user32`, `gdi32`, `shell32`,
-  `msvcrt`, `winmm`, `advapi32`, `comctl32`) — no GCC runtime redistributable to install on the
-  target machine.
-- **Subsystem stamping**: linker flags set the PE's subsystem/OS version to 4.0 (Win95-era).
-- **Stripped (`-s`)**: no debug symbols in the shipped binary — there's no debugger on the
+- **Critical flag, both targets**: `-mcrtdll=msvcrt-os`. Modern mingw-w64 (this build is GCC 16)
+  defaults to linking against the Universal CRT (`api-ms-win-crt-*.dll`), which doesn't exist
+  before Windows 10 — not even with the redistributable installed, and not on XP/2000 any more
+  than on Win9x. `-mcrtdll=msvcrt-os` forces linking against the real `msvcrt.dll` that's present
+  on every Windows version from 95 through 11 instead, so both `hddsynth.exe` and
+  `hddsynth-nt.exe` use it.
+- **CPU target, Win9x only**: `-march=pentium -mtune=pentium`, so `hddsynth.exe` never emits an
+  instruction the original Pentium (and thus the oldest realistic Win95 boxes) can't execute.
+  `hddsynth-nt.exe` doesn't set this — Windows 2000/XP's minimum supported CPUs are already P6+.
+- **Custom Pentium-safe CRT** (`tools/build-pentium-crt.sh`), **Win9x only**: Homebrew's
+  mingw-w64 ships its CRT startup objects and static support libs (`crt2.o`, `libmingw32.a`,
+  `libmingwex.a`, ...) *prebuilt* for a P6+ CPU baseline, containing `cmove`/`cmovne`
+  instructions — my own `-march=pentium` only affects code I compile, not these prebuilt
+  archives. On a real/emulated Pentium (no CMOV) that's an illegal-instruction crash at startup,
+  before `main` is even reached (this is exactly what the first real-hardware test hit). The
+  script rebuilds just those pieces from the matching mingw-w64 source release with
+  `-march=pentium`, installs them to `/tmp/mingw-pentium-sysroot`, and the `Makefile` prefers
+  them via `-B`/`-L` for the Win9x target only — `hddsynth-nt.exe` links Homebrew's stock CRT
+  objects unmodified, since P6+ is already guaranteed on its target OSes.
+- **Threading, both targets**: `-no-pthread`, since GCC otherwise links `libpthread`/
+  `winpthreads` into every binary by default, whether or not the code uses threads — and that
+  library's init path isn't Win95-safe (moot for NT, but harmless/unnecessary to link either way
+  since this codebase only uses native Win32 threading regardless of target).
+- **Static linking, both targets**: `-static -static-libgcc -static-libstdc++`, so the only DLLs
+  either exe depends on are ones Windows itself ships — `hddsynth.exe` needs `kernel32`,
+  `user32`, `gdi32`, `shell32`, `msvcrt`, `winmm`, `advapi32`, `comctl32`; `hddsynth-nt.exe` swaps
+  `advapi32` for `pdh` (see "Two builds, one codebase"). No GCC runtime redistributable to
+  install on the target machine either way.
+- **Subsystem stamping**: 4.0 (Win95-era) for `hddsynth.exe`, 5.0 (Windows 2000 — the lower of
+  2000/XP, so both accept it) for `hddsynth-nt.exe`.
+- **Stripped (`-s`)**: no debug symbols in either shipped binary — there's no debugger on the
   target machine to use them anyway.
 
-One-time setup (rebuilds the Pentium-safe CRT above; only needs re-running if Homebrew updates
-the `mingw-w64` formula):
+One-time setup (rebuilds the Win9x target's Pentium-safe CRT above; only needs re-running if
+Homebrew updates the `mingw-w64` formula; not needed for `hddsynth-nt.exe`):
 
 ```sh
 tools/build-pentium-crt.sh
@@ -155,7 +206,8 @@ tools/build-pentium-crt.sh
 Then build with:
 
 ```sh
-make            # builds build/hddsynth_spike.exe and build/hddsynth.exe
+make            # builds build/hddsynth_spike.exe and build/hddsynth.exe (Win9x)
+make nt         # builds build/hddsynth-nt.exe (Windows 2000/XP+)
 make clean
 ```
 
@@ -218,6 +270,10 @@ so I've recorded them here rather than leaving them buried in commit history:
   stall. Ended up exposing it as a Settings slider (`audioBufferMs`) rather than picking one
   fixed value, since which tradeoff is more annoying genuinely depends on the machine and what
   you're doing with it.
+- **PDH's status constants (`PDH_CSTATUS_VALID_DATA`, `PDH_CSTATUS_NEW_DATA`) live in
+  `<pdhmsg.h>`, not `<pdh.h>`** — including only `<pdh.h>` (which declares the functions/types)
+  compiles fine right up until you reference one of those constants, at which point it's an
+  undeclared-identifier error rather than a missing-include one.
 
 ## Open items
 
@@ -234,3 +290,11 @@ so I've recorded them here rather than leaving them buried in commit history:
   MinGW.org line, or TDM-GCC 4.7.1/4.9.2).
 - **No installer/packaging yet** — currently just a folder (`hddsynth.exe` + `samples/`)
   copied onto the target machine; `hddsynth.exe` expects `samples\` alongside it.
+- **`hddsynth-nt.exe` has never been run** — no Windows 2000/XP hardware or VM available to test
+  it against. It builds cleanly with the expected imports (`pdh.dll` instead of `HKEY_DYN_DATA`
+  registry calls), but that's the extent of verification so far. Needs someone with real
+  NT-family hardware/a VM to confirm the tray/audio/dialogs work as expected and that PDH
+  detection actually reacts to real disk activity, the same way every Win9x feature was checked
+  against real hardware before being considered done.
+- **`hddsynth-nt.exe` only resolves English-language PDH counter names** — see "Two builds, one
+  codebase" above.
