@@ -16,13 +16,26 @@
 #include <process.h>
 
 #define NUM_BUFFERS 4
-#define BUFFER_SAMPLES 8192 // ~512ms at 16kHz per buffer; ~2s buffered
-                             // total, traded for resilience against GUI-
-                             // thread stalls during heavy disk activity.
-                             // The tray icon still flips instantly (that's
-                             // posted independently, not tied to audio
-                             // buffer depth) -- only the audible access
-                             // layer lags by up to ~2s behind detection.
+#define BUFFER_SAMPLES 2048 // ~128ms at 16kHz per buffer; ~512ms buffered
+                             // total. A buffer's content is fixed at the
+                             // moment it's generated and doesn't change
+                             // once queued, and a freshly-generated buffer
+                             // has to wait behind whatever's already ahead
+                             // of it in the device's FIFO -- so this total
+                             // depth is also roughly the worst-case delay
+                             // between an activity-flag change and it
+                             // actually becoming audible, in either
+                             // direction. Used to be 8192/~2s, sized that
+                             // way for resilience against GUI-thread stalls
+                             // when buffer refills were still tied to
+                             // MM_WOM_DONE on the GUI thread -- but that was
+                             // actually fixed by moving refills to their
+                             // own CALLBACK_EVENT-driven thread (see
+                             // AudioThreadProc), not by the buffer depth,
+                             // and 2s of lag was clearly noticeable in
+                             // testing. The tray icon still flips instantly
+                             // either way (posted independently, not tied
+                             // to audio buffer depth).
 
 static HWAVEOUT g_hWaveOut;
 static WAVEHDR g_headers[NUM_BUFFERS];

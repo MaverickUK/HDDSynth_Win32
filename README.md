@@ -2,15 +2,19 @@
 
 A pure-software reimplementation of [HDDSynth](https://github.com/MaverickUK/HDDSynth) for Windows 95/98/ME.
 
-The original HDDSynth is a Raspberry Pi Pico-based hardware device that reads a PC's
-physical HDD LED wire and plays back mechanical-drive sound samples. This project drops
-the hardware entirely: it's a small Windows 9x system tray application that watches for
-disk activity in software and plays the same sample-based audio, so you get authentic
-spinning-HDD sound (and a gray/green tray icon) on a machine that's actually running a
-solid-state drive — no wiring required.
+The original HDDSynth is a Raspberry Pi Pico-based hardware device I built that reads a PC's
+physical HDD LED wire and plays back mechanical-drive sound samples. I wanted a version that
+drops the hardware entirely: a small Windows 9x system tray application that watches for disk
+activity in software and plays the same sample-based audio, so you get authentic spinning-HDD
+sound (and a gray/green tray icon) on a machine that's actually running a solid-state drive —
+no wiring required.
+
+This was built with [Claude Code](https://claude.com/claude-code) — I don't have a Windows 9x
+box handy for day-to-day compiling, so the whole thing was developed on macOS via cross-
+compilation and verified in rounds against my real Windows 98 hardware.
 
 **Status**: working end-to-end, confirmed on real Windows 98 hardware. Versioned with SemVer
-(`src/version.h`) — pre-1.0 since this hasn't been released yet; bumped with each change.
+(`src/version.h`) — pre-1.0 since I haven't released it yet; I bump it with each change.
 
 ## Behavior
 
@@ -27,7 +31,8 @@ solid-state drive — no wiring required.
     sample pack); picking one switches live, no restart needed.
   - **Settings...** — volume, idle/activity balance, minimum access playback time, and the
     activity detection threshold, persisted to `hddsynth.ini` next to the exe.
-  - **About...** — Win9x-style about box with version, author, and a link to the project page.
+  - **About...** — Win9x-style about box with the project logo, version, author, and a link
+    to the project page.
   - **Exit**.
 - Runs quietly in the background alongside other software — event-driven audio thread that's
   fully asleep between buffer refills, sleep-based poll loop for disk detection, no busy-
@@ -37,10 +42,10 @@ solid-state drive — no wiring required.
 
 ```
 src/        C++ sources
-res/        Icon resources (gray.ico / green.ico), the .rc resource script + dialog templates
+res/        Icons, the About logo, the .rc resource script + dialog templates
 samples/    Sample packs -- one subfolder per pack, e.g. samples/original/
-tools/      tools/make_icons.py (icon generator), tools/build-pentium-crt.sh (see Toolchain)
-build/      Build output (gitignored-worthy)
+tools/      Icon/logo generation scripts, tools/build-pentium-crt.sh (see Toolchain)
+build/      Build output (gitignored)
 Makefile    Cross-compilation build rules
 ```
 
@@ -71,25 +76,27 @@ three files:
 - `access.wav` — mixed in during detected activity
 
 `samples/original/` ships with the four original HDDSynth WAVs (GPL-3.0, same license as
-HDDSynth itself) renamed to that convention — `idle.wav` is the longer of the two original idle
-loops (`hdd_idle_long.wav`), per user feedback that the shorter one felt too repetitive; that
-shorter file isn't used. All three are 16-bit PCM; `idle.wav` happens to be stereo while the
-others are mono, but that's not a requirement — the WAV loader downmixes everything to mono at
-load time, and a differing sample rate is handled too (the `waveOut` device is reopened if a
-pack's rate doesn't match the one currently playing).
+HDDSynth itself) renamed to that convention — I used the longer of the two original idle loops
+(`hdd_idle_long.wav`) as `idle.wav`, since the shorter one felt too repetitive; that shorter
+file isn't used. All three are 16-bit PCM; `idle.wav` happens to be stereo while the others are
+mono, but that's not a requirement — the WAV loader downmixes everything to mono at load time,
+and a differing sample rate is handled too (the `waveOut` device is reopened if a pack's rate
+doesn't match the one currently playing).
 
 ## Design notes
 
 | Concern | Choice | Reasoning |
 |---|---|---|
 | Target OS | Windows 95, 98, ME | Broadest "Win9x" support; drives most constraints below. |
-| Audio | Manual PCM mixing over `winmm` (`waveOutOpen`/`waveOutWrite`), one output stream | DirectSound needs DirectX installed and adds a COM dependency. `winmm` ships with every Windows since 3.1. Opening *multiple* simultaneous `waveOutOpen` handles (one per sample) is a classic Win9x trap — cards without hardware mixing (common pre-98SE) reject the second handle. Mixing the layers ourselves in software and writing to a single stream sidesteps that. |
+| Audio | Manual PCM mixing over `winmm` (`waveOutOpen`/`waveOutWrite`), one output stream | DirectSound needs DirectX installed and adds a COM dependency. `winmm` ships with every Windows since 3.1. Opening *multiple* simultaneous `waveOutOpen` handles (one per sample) is a classic Win9x trap — cards without hardware mixing (common pre-98SE) reject the second handle. Mixing the layers myself in software and writing to a single stream sidesteps that. |
 | Buffer refills | Dedicated thread woken by a `CALLBACK_EVENT`, not `MM_WOM_DONE` on the GUI thread | The GUI-thread-message approach caused audible dropouts during heavy disk I/O — exactly when the app most needs to keep playing, since that's also when the GUI message queue is most likely to be delayed. |
+| Buffer depth | 4 × 2048-sample buffers (~512ms total queued), not deeper | A buffer's content is fixed at generation time and has to wait behind whatever's already queued ahead of it — so buffer depth is directly how late/lingering the effect feels. Started at 4×8192 (~2s) for resilience while refills were still GUI-thread-tied; once that was fixed architecturally, the extra depth was just adding noticeable lag for little remaining benefit. |
 | Detection scope | System-wide (any drive), not a specific drive letter | Matches the original hardware's single-LED simplicity. |
 | Detection source | `HKEY_DYN_DATA\PerfStats\{StartStat,StatData,StopStat}` | Win9x has no modern disk-IO-counter API; this is the same real-time counter feed `sysmon.exe` reads. See Toolchain/gotchas for the two non-obvious things about it. |
 | Detection signal | Delta between polls of `VFAT\BReadsSec`/`BWritesSec`, thresholded | These counters are cumulative totals, not rates (see gotchas) — and even a correct delta-based reading needs a minimum-bytes threshold, or ordinary OS housekeeping I/O triggers it every few seconds. |
 | Settings persistence | INI file (`hddsynth.ini`) via `GetPrivateProfileString`/`WritePrivateProfileString`, not the registry | Keeps the app self-contained the same way `samples/` already is — no install/uninstall registry cleanup, and it's the period-correct pattern for the era. |
 | Sample pack switching | Live swap under a `CRITICAL_SECTION` in the mixer, not a full restart | The three `WavPcm` buffers are compound state (pointer+count+rate) that can't be swapped atomically with a single `Interlocked` op the way the existing `g_accessActive` flag can — a lock is the honest way to let the GUI thread (menu click) replace what the audio thread is mid-mix on without tearing. |
+| About box logo | Converted to a 24-bit BITMAP resource, not embedded as PNG | Classic Win9x GDI has no PNG support and BITMAP resources carry no alpha channel, so `tools/make_about_logo.py` composites the source PNG onto the classic Win95 dialog face gray and resizes it before conversion. |
 | Language | C++, conservative subset | No STL threading (`std::thread`/`std::mutex`) — MinGW's `winpthreads` backend calls synchronization primitives that don't exist on Win95. Plain Win32 primitives (`_beginthreadex`, `CRITICAL_SECTION`/`Interlocked*`) instead. |
 
 ## Toolchain
@@ -106,8 +113,8 @@ IDE or VM needed just to *build* the code, only to *run and test* it.
   the original Pentium (and thus the oldest realistic Win95 boxes) can't execute.
 - **Custom Pentium-safe CRT** (`tools/build-pentium-crt.sh`): Homebrew's mingw-w64 ships its
   CRT startup objects and static support libs (`crt2.o`, `libmingw32.a`, `libmingwex.a`, ...)
-  *prebuilt* for a P6+ CPU baseline, containing `cmove`/`cmovne` instructions — our own
-  `-march=pentium` only affects code we compile, not these prebuilt archives. On a real/
+  *prebuilt* for a P6+ CPU baseline, containing `cmove`/`cmovne` instructions — my own
+  `-march=pentium` only affects code I compile, not these prebuilt archives. On a real/
   emulated Pentium (no CMOV) that's an illegal-instruction crash at startup, before `main` is
   even reached (this is exactly what the first real-hardware test hit). The script rebuilds
   just those pieces from the matching mingw-w64 source release with `-march=pentium`, installs
@@ -116,11 +123,12 @@ IDE or VM needed just to *build* the code, only to *run and test* it.
   binary by default, whether or not the code uses threads — and that library's init path isn't
   Win95-safe.
 - **Static linking**: `-static -static-libgcc -static-libstdc++`, so the only DLLs the exe
-  depends on are the ones Windows itself ships (`kernel32`, `user32`, `shell32`, `msvcrt`,
-  `winmm`, `advapi32`) — no GCC runtime redistributable to install on the target machine.
+  depends on are the ones Windows itself ships (`kernel32`, `user32`, `gdi32`, `shell32`,
+  `msvcrt`, `winmm`, `advapi32`, `comctl32`) — no GCC runtime redistributable to install on the
+  target machine.
 - **Subsystem stamping**: linker flags set the PE's subsystem/OS version to 4.0 (Win95-era).
-- **Stripped (`-s`)**: no debug symbols in the shipped binary (~22KB stripped) — there's no
-  debugger on the target machine to use them anyway.
+- **Stripped (`-s`)**: no debug symbols in the shipped binary — there's no debugger on the
+  target machine to use them anyway.
 
 One-time setup (rebuilds the Pentium-safe CRT above; only needs re-running if Homebrew updates
 the `mingw-w64` formula):
@@ -144,7 +152,7 @@ real Windows 98 hardware is what caught everything else below.
 ### Gotchas found the hard way
 
 These cost real debugging time against real hardware and are easy to reintroduce by accident,
-so they're recorded here rather than just in commit history:
+so I've recorded them here rather than leaving them buried in commit history:
 
 - **`WIN32_LEAN_AND_MEAN` is required before every `#include <windows.h>`.** Without it,
   `windows.h` pulls in the OLE/COM headers, which drag in libstdc++'s `<cstdlib>` wrapper —
@@ -161,7 +169,7 @@ so they're recorded here rather than just in commit history:
   initialized through `_beginthreadex`'s startup path; skipping it is a source of silent heap
   corruption or hangs rather than a clean crash. This caused a real, confusing failure during
   development (audio and disk-monitor logging both went silent at once, no crash dialog) before
-  being traced back to this.
+  I traced it back to this.
 - **`MM_WOM_DONE`'s parameters**: `wParam` is the `HWAVEOUT`, `lParam` is the finished
   `WAVEHDR*` — not the other way round. (Moot now since audio uses `CALLBACK_EVENT` instead of
   window messages, but worth knowing if `CALLBACK_WINDOW` comes back for any reason.)
@@ -185,23 +193,24 @@ so they're recorded here rather than just in commit history:
   sample packs) were added too — `GetPrivateProfileString` in particular looks in the Windows
   directory, not the CWD, if given a bare filename. Fixed by resolving everything relative to
   the exe's own directory via `GetModuleFileNameA` (`src/paths.cpp`) instead.
+- **Deep audio buffering trades directly against how "live" the effect feels.** A generously
+  large buffer depth was worth it while refills were tied to the GUI thread (protection against
+  message-queue stalls); once that architecture changed, the same depth just became ~2 seconds
+  of lag between real disk activity and the sound reacting to it, in both directions. Buffer
+  depth is effectively a latency budget, not a free safety margin.
 
 ## Open items
 
 - **Large file copies can freeze the whole Windows UI for a few seconds** (not just this app —
   audio, GDI/USER, everything). This persisted even after ruling out this app's own thread
   priority as the cause (rolled back to normal, no change) and while the disk monitor was
-  provably idle throughout. Most likely a system-level PIO-vs-DMA disk transfer issue on the
+  provably idle throughout. Most likely a system-level PIO-vs-DMA disk transfer issue on my
   test machine, not something this app can fix — worth checking Control Panel → System →
-  Performance tab and Device Manager → disk → DMA setting. Set aside per user request; a small
-  batch of smaller file copies showed no such freeze.
+  Performance tab and Device Manager → disk → DMA setting. Set aside for now; a small batch of
+  smaller file copies showed no such freeze.
 - **Toolchain longevity**: this relies on Homebrew's current mingw-w64 (GCC 16) working with
   `-mcrtdll=msvcrt-os`, which isn't its primary supported configuration. If deeper issues
   surface with more Win32 API surface, the fallback is an older/legacy toolchain (classic
   MinGW.org line, or TDM-GCC 4.7.1/4.9.2).
 - **No installer/packaging yet** — currently just a folder (`hddsynth.exe` + `samples/`)
   copied onto the target machine; `hddsynth.exe` expects `samples\` alongside it.
-- **About/Settings/Sample-pack-switching are newly built and not yet run on real hardware** —
-  verified statically (compiles clean, correct DLL/symbol set, zero CMOV/RDTSC/CPUID) but the
-  dialogs, trackbar rendering, live volume/balance changes, and pack switching all need an
-  actual Win9x test pass, the same as every other feature so far.

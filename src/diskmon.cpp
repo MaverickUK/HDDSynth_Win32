@@ -24,7 +24,11 @@
 #define POLL_INTERVAL_MS 150
 // Once activity is seen, stay "active" for this long after the last hit
 // so brief gaps between disk operations don't flicker the icon/audio.
-#define ACTIVITY_HANGOVER_MS 400
+// This adds directly to how long the effect lingers after real activity
+// stops, so kept fairly tight -- was 400ms, trimmed after testing found
+// the combination of this plus audio buffering made release noticeably
+// laggy (see audio.cpp's BUFFER_SAMPLES, the much bigger contributor).
+#define ACTIVITY_HANGOVER_MS 250
 #define MAX_COUNTERS 8
 
 struct CounterCandidate {

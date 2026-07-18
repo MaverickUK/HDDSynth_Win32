@@ -7,7 +7,9 @@
 #define IDD_ABOUT    200
 #define IDD_SETTINGS 201
 
-#define IDC_ABOUT_ICON    1101
+#define IDB_LOGO 300
+
+#define IDC_ABOUT_LOGO    1100
 #define IDC_ABOUT_APPNAME 1102
 #define IDC_ABOUT_VERSION 1103
 #define IDC_ABOUT_AUTHOR  1104
