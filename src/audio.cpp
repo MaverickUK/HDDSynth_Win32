@@ -15,42 +15,54 @@
 #include <mmsystem.h>
 #include <process.h>
 
-#define NUM_BUFFERS 4
-#define BUFFER_SAMPLES 2048 // ~128ms at 16kHz per buffer; ~512ms buffered
-                             // total. A buffer's content is fixed at the
-                             // moment it's generated and doesn't change
-                             // once queued, and a freshly-generated buffer
-                             // has to wait behind whatever's already ahead
-                             // of it in the device's FIFO -- so this total
-                             // depth is also roughly the worst-case delay
-                             // between an activity-flag change and it
-                             // actually becoming audible, in either
-                             // direction. Used to be 8192/~2s, sized that
-                             // way for resilience against GUI-thread stalls
-                             // when buffer refills were still tied to
-                             // MM_WOM_DONE on the GUI thread -- but that was
-                             // actually fixed by moving refills to their
-                             // own CALLBACK_EVENT-driven thread (see
-                             // AudioThreadProc), not by the buffer depth,
-                             // and 2s of lag was clearly noticeable in
-                             // testing. The tray icon still flips instantly
-                             // either way (posted independently, not tied
-                             // to audio buffer depth).
+// A buffer's content is fixed at the moment it's generated and doesn't
+// change once queued, and a freshly-generated buffer has to wait behind
+// whatever's already ahead of it in the device's FIFO -- so total queued
+// depth (buffer count * BUFFER_SAMPLES) is *both* the worst-case delay
+// before an activity-flag change becomes audible *and* how much of a
+// driver/CPU stall (e.g. a PIO-mode disk transfer with no DMA hogging
+// the CPU enough to delay the sound driver's own completion signaling --
+// not something any thread priority on our side can work around) the
+// audio can absorb before it goes silent. These two things trade
+// directly against each other with this buffering approach, which is why
+// depth is now a user-facing "Audio Buffering" Settings slider
+// (audioBufferMs) rather than a fixed constant: there's no single right
+// answer, it depends on the machine and what's more annoying to a given
+// user, lag or the occasional dropout during something like a Scandisk
+// surface scan.
+#define BUFFER_UNIT_SAMPLES 2048 // ~128ms at 16kHz; fixed refill granularity
+#define MIN_BUFFERS 2             // ~256ms floor
+#define MAX_BUFFERS 16            // ~2048ms ceiling; also the fixed array size below
 
 static HWAVEOUT g_hWaveOut;
-static WAVEHDR g_headers[NUM_BUFFERS];
-static short *g_bufferData[NUM_BUFFERS];
+static WAVEHDR g_headers[MAX_BUFFERS];
+static short *g_bufferData[MAX_BUFFERS];
+static int g_numBuffers = 4;
 static HANDLE g_event;
 static HANDLE g_thread;
 static volatile LONG g_stopRequested = 0;
 static unsigned long g_currentSampleRate = 0;
 
+static int MsToBufferCount(int ms) {
+    // ~128ms; assumes a 16kHz sample rate, true for every shipped pack.
+    // BUFFER_UNIT_SAMPLES is a fixed sample count, so a pack at some
+    // other rate would make each buffer a slightly different real-world
+    // duration than this nominal figure -- a minor approximation, not
+    // worth the complexity of re-deriving it from MixerGetSampleRate()
+    // for what's meant to be a rough "how much lag/headroom" slider.
+    const int unitMs = BUFFER_UNIT_SAMPLES * 1000 / 16000;
+    int count = (ms + unitMs / 2) / unitMs; // round to nearest
+    if (count < MIN_BUFFERS) count = MIN_BUFFERS;
+    if (count > MAX_BUFFERS) count = MAX_BUFFERS;
+    return count;
+}
+
 static void FillAndQueue(int index) {
-    MixerFillBuffer(g_bufferData[index], BUFFER_SAMPLES);
+    MixerFillBuffer(g_bufferData[index], BUFFER_UNIT_SAMPLES);
 
     WAVEHDR *hdr = &g_headers[index];
     hdr->lpData = (LPSTR)g_bufferData[index];
-    hdr->dwBufferLength = BUFFER_SAMPLES * sizeof(short);
+    hdr->dwBufferLength = BUFFER_UNIT_SAMPLES * sizeof(short);
     hdr->dwFlags = 0;
     hdr->dwLoops = 0;
 
@@ -64,7 +76,7 @@ static unsigned __stdcall AudioThreadProc(void *) {
         if (InterlockedExchangeAdd(&g_stopRequested, 0)) {
             break;
         }
-        for (int i = 0; i < NUM_BUFFERS; i++) {
+        for (int i = 0; i < g_numBuffers; i++) {
             if (g_headers[i].dwFlags & WHDR_DONE) {
                 waveOutUnprepareHeader(g_hWaveOut, &g_headers[i], sizeof(WAVEHDR));
                 FillAndQueue(i);
@@ -108,13 +120,34 @@ static void StopAudioThread() {
     }
 }
 
+static void FreeBuffers() {
+    for (int i = 0; i < g_numBuffers; i++) {
+        waveOutUnprepareHeader(g_hWaveOut, &g_headers[i], sizeof(WAVEHDR));
+        if (g_bufferData[i]) {
+            HeapFree(GetProcessHeap(), 0, g_bufferData[i]);
+            g_bufferData[i] = NULL;
+        }
+    }
+}
+
+static void AllocateAndQueueBuffers() {
+    ZeroMemory(g_headers, sizeof(g_headers));
+    for (int i = 0; i < g_numBuffers; i++) {
+        g_bufferData[i] = (short *)HeapAlloc(GetProcessHeap(), 0, BUFFER_UNIT_SAMPLES * sizeof(short));
+        FillAndQueue(i);
+    }
+}
+
 bool InitAudio(HWND hwnd, const char *spinupWavPath, const char *idleWavPath,
-                const char *accessWavPath, int volume, int balance, int minPlaybackMs) {
+                const char *accessWavPath, int volume, int balance, int minPlaybackMs,
+                int bufferMs) {
     (void)hwnd;
 
     if (!MixerInit(spinupWavPath, idleWavPath, accessWavPath, volume, balance, minPlaybackMs)) {
         return false;
     }
+
+    g_numBuffers = MsToBufferCount(bufferMs);
 
     g_event = CreateEventA(NULL, FALSE, FALSE, NULL);
     if (!g_event) {
@@ -129,19 +162,20 @@ bool InitAudio(HWND hwnd, const char *spinupWavPath, const char *idleWavPath,
         return false;
     }
 
-    ZeroMemory(g_headers, sizeof(g_headers));
-    for (int i = 0; i < NUM_BUFFERS; i++) {
-        g_bufferData[i] = (short *)HeapAlloc(GetProcessHeap(), 0, BUFFER_SAMPLES * sizeof(short));
-        FillAndQueue(i);
-    }
+    AllocateAndQueueBuffers();
 
     // Deliberately left at normal priority (no SetThreadPriority call):
     // an earlier version raised this to ABOVE_NORMAL, and the very next
     // real-hardware test showed the whole Windows UI freezing for a few
     // seconds during a large file copy -- on Win9x's largely single-
     // threaded GDI/USER subsystem, an elevated-priority thread waking
-    // frequently is a plausible contributor, and the ~2s of buffering
-    // already queued should absorb ordinary scheduling delays without it.
+    // frequently is a plausible contributor. That test later turned out
+    // to implicate PIO-vs-DMA disk transfer instead (see the freeze
+    // still happening with this thread at normal priority and the disk
+    // monitor provably idle), but there's no evidence priority elevation
+    // would actually help this specific failure mode either -- see
+    // BUFFER_UNIT_SAMPLES's comment on why buffering depth, not thread
+    // scheduling, is the real lever here.
     StartAudioThread();
 
     return true;
@@ -161,6 +195,20 @@ void SetAudioBalance(int balance) {
 
 void SetAudioMinPlaybackMs(int ms) {
     MixerSetMinPlaybackMs(ms);
+}
+
+void SetAudioBufferMs(int ms) {
+    int newCount = MsToBufferCount(ms);
+    if (newCount == g_numBuffers) {
+        return;
+    }
+
+    StopAudioThread();
+    waveOutReset(g_hWaveOut);
+    FreeBuffers();
+    g_numBuffers = newCount;
+    AllocateAndQueueBuffers();
+    StartAudioThread();
 }
 
 bool SwitchAudioSamplePack(const char *spinupWavPath, const char *idleWavPath,
@@ -183,17 +231,13 @@ bool SwitchAudioSamplePack(const char *spinupWavPath, const char *idleWavPath,
     StopAudioThread();
 
     waveOutReset(g_hWaveOut);
-    for (int i = 0; i < NUM_BUFFERS; i++) {
-        waveOutUnprepareHeader(g_hWaveOut, &g_headers[i], sizeof(WAVEHDR));
-    }
+    FreeBuffers();
     waveOutClose(g_hWaveOut);
 
     if (!OpenWaveOutDevice()) {
         return false;
     }
-    for (int i = 0; i < NUM_BUFFERS; i++) {
-        FillAndQueue(i);
-    }
+    AllocateAndQueueBuffers();
 
     StartAudioThread();
     return true;
@@ -207,13 +251,7 @@ void ShutdownAudio() {
     }
     if (g_hWaveOut) {
         waveOutReset(g_hWaveOut);
-        for (int i = 0; i < NUM_BUFFERS; i++) {
-            waveOutUnprepareHeader(g_hWaveOut, &g_headers[i], sizeof(WAVEHDR));
-            if (g_bufferData[i]) {
-                HeapFree(GetProcessHeap(), 0, g_bufferData[i]);
-                g_bufferData[i] = NULL;
-            }
-        }
+        FreeBuffers();
         waveOutClose(g_hWaveOut);
         g_hWaveOut = NULL;
     }

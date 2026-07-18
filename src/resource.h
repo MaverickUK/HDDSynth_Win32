@@ -21,5 +21,7 @@
 #define IDC_BALANCE_LABEL    1204
 #define IDC_MINPLAY_EDIT     1205
 #define IDC_THRESHOLD_EDIT   1206
+#define IDC_BUFFER_SLIDER    1207
+#define IDC_BUFFER_LABEL     1208
 
 #endif

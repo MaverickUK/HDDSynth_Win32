@@ -14,7 +14,8 @@
 // the GUI message queue for a second or more, and that's exactly when
 // this app most needs to keep playing.
 bool InitAudio(HWND hwnd, const char *spinupWavPath, const char *idleWavPath,
-                const char *accessWavPath, int volume, int balance, int minPlaybackMs);
+                const char *accessWavPath, int volume, int balance, int minPlaybackMs,
+                int bufferMs);
 
 // Thin pass-throughs to the mixer, so callers only need to depend on
 // audio.h.
@@ -22,6 +23,13 @@ void SetAudioAccessActive(BOOL active);
 void SetAudioVolume(int volume);
 void SetAudioBalance(int balance);
 void SetAudioMinPlaybackMs(int ms);
+
+// Total queued audio depth in ms -- trades directly between latency
+// (lower is snappier) and resilience against playback stalls (higher
+// survives longer CPU/driver hiccups, e.g. a PIO-mode disk transfer,
+// without going silent). Reallocates and requeues buffers; briefly
+// stops/restarts the refill thread, same as a sample pack switch.
+void SetAudioBufferMs(int ms);
 
 // Switches to a different sample pack's WAVs live (see
 // MixerSwitchSamplePack), reopening the waveOut device first if the new

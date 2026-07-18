@@ -29,14 +29,29 @@ compilation and verified in rounds against my real Windows 98 hardware.
 - Right-click the tray icon for:
   - **Sample** — a submenu listing every subfolder under `samples\` (each a self-contained
     sample pack); picking one switches live, no restart needed.
-  - **Settings...** — volume, idle/activity balance, minimum access playback time, and the
-    activity detection threshold, persisted to `hddsynth.ini` next to the exe.
+  - **Settings...** — volume, idle/activity balance, audio buffering (see note below),
+    minimum access playback time, and the activity detection threshold, persisted to
+    `hddsynth.ini` next to the exe.
   - **About...** — Win9x-style about box with the project logo, version, author, and a link
     to the project page.
   - **Exit**.
 - Runs quietly in the background alongside other software — event-driven audio thread that's
   fully asleep between buffer refills, sleep-based poll loop for disk detection, no busy-
   waiting anywhere.
+
+### A note on dropouts during heavy disk operations
+
+Under sustained, heavy disk activity — a Scandisk surface scan is the clearest example I've
+hit — the audio can still cut out briefly even though normal use (copying files, everyday
+activity) works fine. This is very likely PIO-mode disk transfer (no DMA) pegging the CPU
+enough to delay the sound driver's own completion signaling, which no thread priority on this
+app's side can work around — only having enough audio already queued up to ride out the stall
+helps, and that directly costs latency (see **Audio buffering** in Settings). There's no
+setting that eliminates this entirely without reintroducing the multi-second lag I started
+with; the slider just lets you pick a point on that tradeoff rather than being stuck with mine.
+If a particular machine hits this a lot, check whether Windows considers its disk to be running
+in DMA mode (see Open items below) — that's the actual underlying cause, not something this app
+can fix.
 
 ## Project layout
 
@@ -90,7 +105,7 @@ doesn't match the one currently playing).
 | Target OS | Windows 95, 98, ME | Broadest "Win9x" support; drives most constraints below. |
 | Audio | Manual PCM mixing over `winmm` (`waveOutOpen`/`waveOutWrite`), one output stream | DirectSound needs DirectX installed and adds a COM dependency. `winmm` ships with every Windows since 3.1. Opening *multiple* simultaneous `waveOutOpen` handles (one per sample) is a classic Win9x trap — cards without hardware mixing (common pre-98SE) reject the second handle. Mixing the layers myself in software and writing to a single stream sidesteps that. |
 | Buffer refills | Dedicated thread woken by a `CALLBACK_EVENT`, not `MM_WOM_DONE` on the GUI thread | The GUI-thread-message approach caused audible dropouts during heavy disk I/O — exactly when the app most needs to keep playing, since that's also when the GUI message queue is most likely to be delayed. |
-| Buffer depth | 4 × 2048-sample buffers (~512ms total queued), not deeper | A buffer's content is fixed at generation time and has to wait behind whatever's already queued ahead of it — so buffer depth is directly how late/lingering the effect feels. Started at 4×8192 (~2s) for resilience while refills were still GUI-thread-tied; once that was fixed architecturally, the extra depth was just adding noticeable lag for little remaining benefit. |
+| Buffer depth | User-configurable (`audioBufferMs`, default 750ms; ~256ms-2048ms range), not a fixed constant | A buffer's content is fixed at generation time and has to wait behind whatever's already queued ahead of it — so total buffer depth is *both* the worst-case lag before a change is heard *and* how much of a driver/CPU stall (e.g. a PIO-mode disk transfer) the audio can absorb before going silent. Those two things trade directly against each other with no single right answer, so it's a Settings slider rather than my picking one number — see "A note on dropouts" above. |
 | Detection scope | System-wide (any drive), not a specific drive letter | Matches the original hardware's single-LED simplicity. |
 | Detection source | `HKEY_DYN_DATA\PerfStats\{StartStat,StatData,StopStat}` | Win9x has no modern disk-IO-counter API; this is the same real-time counter feed `sysmon.exe` reads. See Toolchain/gotchas for the two non-obvious things about it. |
 | Detection signal | Delta between polls of `VFAT\BReadsSec`/`BWritesSec`, thresholded | These counters are cumulative totals, not rates (see gotchas) — and even a correct delta-based reading needs a minimum-bytes threshold, or ordinary OS housekeeping I/O triggers it every few seconds. |
@@ -193,11 +208,16 @@ so I've recorded them here rather than leaving them buried in commit history:
   sample packs) were added too — `GetPrivateProfileString` in particular looks in the Windows
   directory, not the CWD, if given a bare filename. Fixed by resolving everything relative to
   the exe's own directory via `GetModuleFileNameA` (`src/paths.cpp`) instead.
-- **Deep audio buffering trades directly against how "live" the effect feels.** A generously
-  large buffer depth was worth it while refills were tied to the GUI thread (protection against
-  message-queue stalls); once that architecture changed, the same depth just became ~2 seconds
-  of lag between real disk activity and the sound reacting to it, in both directions. Buffer
-  depth is effectively a latency budget, not a free safety margin.
+- **Deep audio buffering trades directly against how "live" the effect feels — but also against
+  resilience to real stalls, in the opposite direction, with no way to get both from the same
+  number.** A generously large buffer depth was worth it while refills were tied to the GUI
+  thread (protection against message-queue stalls); once that architecture changed, the same
+  depth just became ~2 seconds of lag between real disk activity and the sound reacting to it.
+  I cut it down for that reason, then hit audible dropouts running a Scandisk surface scan —
+  the *same* depth number that caused the lag was also what had been absorbing that kind of
+  stall. Ended up exposing it as a Settings slider (`audioBufferMs`) rather than picking one
+  fixed value, since which tradeoff is more annoying genuinely depends on the machine and what
+  you're doing with it.
 
 ## Open items
 

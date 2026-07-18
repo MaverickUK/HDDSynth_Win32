@@ -173,7 +173,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     char spinupPath[MAX_PATH], idlePath[MAX_PATH], accessPath[MAX_PATH];
     BuildSamplePackPaths(g_settings.samplePack, spinupPath, idlePath, accessPath, MAX_PATH);
     InitAudio(hwnd, spinupPath, idlePath, accessPath,
-              g_settings.volume, g_settings.balance, g_settings.minPlaybackMs);
+              g_settings.volume, g_settings.balance, g_settings.minPlaybackMs,
+              g_settings.audioBufferMs);
     StartDiskActivityMonitor(hwnd, g_settings.activityThresholdBytes);
 
     MSG msg;

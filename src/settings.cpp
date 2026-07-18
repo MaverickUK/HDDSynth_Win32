@@ -12,6 +12,7 @@
 #define DEFAULT_BALANCE 50
 #define DEFAULT_MIN_PLAYBACK_MS 200
 #define DEFAULT_ACTIVITY_THRESHOLD_BYTES 2048
+#define DEFAULT_AUDIO_BUFFER_MS 750
 #define DEFAULT_SAMPLE_PACK "original"
 
 static void GetIniPath(char *out, size_t outSize) {
@@ -27,6 +28,8 @@ void LoadSettings(Settings *out) {
     out->minPlaybackMs = GetPrivateProfileIntA("Audio", "MinPlaybackMs", DEFAULT_MIN_PLAYBACK_MS, iniPath);
     out->activityThresholdBytes = GetPrivateProfileIntA("Audio", "ActivityThresholdBytes",
                                                          DEFAULT_ACTIVITY_THRESHOLD_BYTES, iniPath);
+    out->audioBufferMs = GetPrivateProfileIntA("Audio", "AudioBufferMs",
+                                                 DEFAULT_AUDIO_BUFFER_MS, iniPath);
     GetPrivateProfileStringA("Audio", "SamplePack", DEFAULT_SAMPLE_PACK,
                               out->samplePack, sizeof(out->samplePack), iniPath);
 
@@ -36,6 +39,8 @@ void LoadSettings(Settings *out) {
     if (out->balance > 100) out->balance = 100;
     if (out->minPlaybackMs < 0) out->minPlaybackMs = 0;
     if (out->activityThresholdBytes < 0) out->activityThresholdBytes = 0;
+    if (out->audioBufferMs < MIN_AUDIO_BUFFER_MS) out->audioBufferMs = MIN_AUDIO_BUFFER_MS;
+    if (out->audioBufferMs > MAX_AUDIO_BUFFER_MS) out->audioBufferMs = MAX_AUDIO_BUFFER_MS;
 }
 
 void SaveSettings(const Settings *s) {
@@ -54,6 +59,9 @@ void SaveSettings(const Settings *s) {
 
     wsprintfA(buf, "%d", s->activityThresholdBytes);
     WritePrivateProfileStringA("Audio", "ActivityThresholdBytes", buf, iniPath);
+
+    wsprintfA(buf, "%d", s->audioBufferMs);
+    WritePrivateProfileStringA("Audio", "AudioBufferMs", buf, iniPath);
 
     WritePrivateProfileStringA("Audio", "SamplePack", s->samplePack, iniPath);
 }

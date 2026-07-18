@@ -1,8 +1,9 @@
-// Settings dialog: two trackbar sliders (volume, balance) plus two edit
-// fields for the less frequently touched tunables (min playback time,
-// activity threshold). Trackbar is a common control (comctl32.dll,
-// present on Win95+) -- InitCommonControls() must be called once before
-// any dialog containing one is created (done in tray.cpp's WinMain).
+// Settings dialog: three trackbar sliders (volume, balance, audio
+// buffering) plus two edit fields for the less frequently touched
+// tunables (min playback time, activity threshold). Trackbar is a common
+// control (comctl32.dll, present on Win95+) -- InitCommonControls() must
+// be called once before any dialog containing one is created (done in
+// tray.cpp's WinMain).
 #include "settings_dialog.h"
 #include "resource.h"
 #include "audio.h"
@@ -21,6 +22,12 @@ static void UpdateBalanceLabel(HWND hDlg, int pos) {
     SetDlgItemTextA(hDlg, IDC_BALANCE_LABEL, buf);
 }
 
+static void UpdateBufferLabel(HWND hDlg, int pos) {
+    char buf[16];
+    wsprintfA(buf, "%dms", pos);
+    SetDlgItemTextA(hDlg, IDC_BUFFER_LABEL, buf);
+}
+
 static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_INITDIALOG: {
@@ -37,6 +44,12 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
             SendMessageA(hBal, TBM_SETPOS, TRUE, s->balance);
             UpdateBalanceLabel(hDlg, s->balance);
 
+            HWND hBuf = GetDlgItem(hDlg, IDC_BUFFER_SLIDER);
+            SendMessageA(hBuf, TBM_SETRANGE, TRUE, MAKELONG(MIN_AUDIO_BUFFER_MS, MAX_AUDIO_BUFFER_MS));
+            SendMessageA(hBuf, TBM_SETLINESIZE, 0, 50);
+            SendMessageA(hBuf, TBM_SETPOS, TRUE, s->audioBufferMs);
+            UpdateBufferLabel(hDlg, s->audioBufferMs);
+
             SetDlgItemInt(hDlg, IDC_MINPLAY_EDIT, s->minPlaybackMs, FALSE);
             SetDlgItemInt(hDlg, IDC_THRESHOLD_EDIT, s->activityThresholdBytes, FALSE);
             return TRUE;
@@ -45,10 +58,13 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
             HWND hCtl = (HWND)lp;
             HWND hVol = GetDlgItem(hDlg, IDC_VOLUME_SLIDER);
             HWND hBal = GetDlgItem(hDlg, IDC_BALANCE_SLIDER);
+            HWND hBuf = GetDlgItem(hDlg, IDC_BUFFER_SLIDER);
             if (hCtl == hVol) {
                 UpdateVolumeLabel(hDlg, (int)SendMessageA(hVol, TBM_GETPOS, 0, 0));
             } else if (hCtl == hBal) {
                 UpdateBalanceLabel(hDlg, (int)SendMessageA(hBal, TBM_GETPOS, 0, 0));
+            } else if (hCtl == hBuf) {
+                UpdateBufferLabel(hDlg, (int)SendMessageA(hBuf, TBM_GETPOS, 0, 0));
             }
             return 0;
         }
@@ -57,6 +73,7 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
                 Settings *s = (Settings *)GetWindowLongPtrA(hDlg, GWLP_USERDATA);
                 s->volume = (int)SendMessageA(GetDlgItem(hDlg, IDC_VOLUME_SLIDER), TBM_GETPOS, 0, 0);
                 s->balance = (int)SendMessageA(GetDlgItem(hDlg, IDC_BALANCE_SLIDER), TBM_GETPOS, 0, 0);
+                s->audioBufferMs = (int)SendMessageA(GetDlgItem(hDlg, IDC_BUFFER_SLIDER), TBM_GETPOS, 0, 0);
 
                 BOOL ok;
                 int minPlay = GetDlgItemInt(hDlg, IDC_MINPLAY_EDIT, &ok, FALSE);
@@ -91,5 +108,6 @@ bool ShowSettingsDialog(HWND parent, HINSTANCE hInst, Settings *s) {
     SetAudioBalance(s->balance);
     SetAudioMinPlaybackMs(s->minPlaybackMs);
     SetDiskActivityThreshold(s->activityThresholdBytes);
+    SetAudioBufferMs(s->audioBufferMs);
     return true;
 }
