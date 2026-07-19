@@ -6,6 +6,7 @@
 
 #define IDD_ABOUT    200
 #define IDD_SETTINGS 201
+#define IDD_WRONGOS  202
 
 #define IDB_LOGO 300
 
@@ -25,5 +26,7 @@
 #define IDC_BUFFER_SLIDER    1207
 #define IDC_BUFFER_LABEL     1208
 #define IDC_APPLY_BUTTON     1209
+
+#define IDC_WRONGOS_TEXT     1300
 
 #endif
