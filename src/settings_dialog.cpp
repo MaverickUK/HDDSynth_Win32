@@ -51,6 +51,8 @@ static void ReadControlsIntoSettings(HWND hDlg, Settings *s) {
     if (ok) {
         s->activityThresholdBytes = threshold;
     }
+
+    s->audioApi = (int)SendMessageA(GetDlgItem(hDlg, IDC_AUDIOAPI_COMBO), CB_GETCURSEL, 0, 0);
 }
 
 static void ApplySettingsLive(const Settings *s) {
@@ -86,6 +88,12 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
 
             SetDlgItemInt(hDlg, IDC_MINPLAY_EDIT, s->minPlaybackMs, FALSE);
             SetDlgItemInt(hDlg, IDC_THRESHOLD_EDIT, s->activityThresholdBytes, FALSE);
+
+            HWND hApi = GetDlgItem(hDlg, IDC_AUDIOAPI_COMBO);
+            SendMessageA(hApi, CB_ADDSTRING, 0, (LPARAM)"Auto");
+            SendMessageA(hApi, CB_ADDSTRING, 0, (LPARAM)"WaveOut (MME)");
+            SendMessageA(hApi, CB_ADDSTRING, 0, (LPARAM)"DirectSound");
+            SendMessageA(hApi, CB_SETCURSEL, s->audioApi, 0);
             return TRUE;
         }
         case WM_HSCROLL: {

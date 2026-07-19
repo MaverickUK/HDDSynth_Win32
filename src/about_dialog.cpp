@@ -9,6 +9,7 @@
 #include "about_dialog.h"
 #include "resource.h"
 #include "version.h"
+#include "audio.h"
 #include <shellapi.h>
 
 static HFONT g_linkFont = NULL;
@@ -30,6 +31,9 @@ static BOOL CALLBACK AboutDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
             wsprintfA(buf, "Version %s", HDDSYNTH_VERSION_STRING);
             SetDlgItemTextA(hDlg, IDC_ABOUT_VERSION, buf);
             SetDlgItemTextA(hDlg, IDC_ABOUT_BUILD, HDDSYNTH_BUILD_NAME);
+            char audioBuf[48];
+            wsprintfA(audioBuf, "Audio: %s", GetActiveAudioBackendName());
+            SetDlgItemTextA(hDlg, IDC_ABOUT_AUDIOAPI, audioBuf);
             SetDlgItemTextA(hDlg, IDC_ABOUT_LINK, HDDSYNTH_GITHUB_URL);
 
             HWND hLink = GetDlgItem(hDlg, IDC_ABOUT_LINK);
