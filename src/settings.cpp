@@ -5,6 +5,7 @@
 // registry cleanup to think about.
 #include "settings.h"
 #include "paths.h"
+#include "audio.h"
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
@@ -13,6 +14,7 @@
 #define DEFAULT_MIN_PLAYBACK_MS 200
 #define DEFAULT_ACTIVITY_THRESHOLD_BYTES 2048
 #define DEFAULT_AUDIO_BUFFER_MS 750
+#define DEFAULT_AUDIO_API AUDIO_API_AUTO
 #define DEFAULT_SAMPLE_PACK "original"
 
 static void GetIniPath(char *out, size_t outSize) {
@@ -30,6 +32,7 @@ void LoadSettings(Settings *out) {
                                                          DEFAULT_ACTIVITY_THRESHOLD_BYTES, iniPath);
     out->audioBufferMs = GetPrivateProfileIntA("Audio", "AudioBufferMs",
                                                  DEFAULT_AUDIO_BUFFER_MS, iniPath);
+    out->audioApi = GetPrivateProfileIntA("Audio", "AudioApi", DEFAULT_AUDIO_API, iniPath);
     GetPrivateProfileStringA("Audio", "SamplePack", DEFAULT_SAMPLE_PACK,
                               out->samplePack, sizeof(out->samplePack), iniPath);
 
@@ -41,6 +44,9 @@ void LoadSettings(Settings *out) {
     if (out->activityThresholdBytes < 0) out->activityThresholdBytes = 0;
     if (out->audioBufferMs < MIN_AUDIO_BUFFER_MS) out->audioBufferMs = MIN_AUDIO_BUFFER_MS;
     if (out->audioBufferMs > MAX_AUDIO_BUFFER_MS) out->audioBufferMs = MAX_AUDIO_BUFFER_MS;
+    if (out->audioApi < AUDIO_API_AUTO || out->audioApi > AUDIO_API_DSOUND) {
+        out->audioApi = DEFAULT_AUDIO_API;
+    }
 }
 
 void SaveSettings(const Settings *s) {
@@ -62,6 +68,9 @@ void SaveSettings(const Settings *s) {
 
     wsprintfA(buf, "%d", s->audioBufferMs);
     WritePrivateProfileStringA("Audio", "AudioBufferMs", buf, iniPath);
+
+    wsprintfA(buf, "%d", s->audioApi);
+    WritePrivateProfileStringA("Audio", "AudioApi", buf, iniPath);
 
     WritePrivateProfileStringA("Audio", "SamplePack", s->samplePack, iniPath);
 }

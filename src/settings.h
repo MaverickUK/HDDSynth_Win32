@@ -13,6 +13,7 @@ struct Settings {
     int minPlaybackMs;            // access sample minimum play time
     int activityThresholdBytes;   // bytes/poll before it counts as activity
     int audioBufferMs;            // total queued audio depth: latency vs stall resilience
+    int audioApi;                 // AUDIO_API_AUTO/WAVEOUT/DSOUND (see audio.h)
     char samplePack[64];
 };
 

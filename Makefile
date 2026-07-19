@@ -65,10 +65,11 @@ $(BUILD)/hddsynth.res.o: res/hddsynth.rc res/gray.ico res/green.ico res/hddsynth
 
 # Shared application logic -- see src/diskmon.h: the only file that
 # differs per OS family is the disk-activity monitor implementation.
-COMMON_SRCS := src/tray.cpp src/audio.cpp src/mixer.cpp src/wav.cpp \
+COMMON_SRCS := src/tray.cpp src/audio.cpp src/audio_waveout.cpp src/audio_dsound.cpp \
+               src/mixer.cpp src/wav.cpp \
                src/paths.cpp src/samplepack.cpp src/settings.cpp \
                src/about_dialog.cpp src/settings_dialog.cpp
-COMMON_HDRS := src/audio.h src/mixer.h src/wav.h src/diskmon.h src/paths.h \
+COMMON_HDRS := src/audio.h src/audio_backend.h src/mixer.h src/wav.h src/diskmon.h src/paths.h \
                src/samplepack.h src/settings.h src/about_dialog.h src/settings_dialog.h \
                src/version.h src/resource.h
 
