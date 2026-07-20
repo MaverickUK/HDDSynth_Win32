@@ -16,9 +16,10 @@ cross-compilation and verified in rounds against my real Windows 98 hardware.
 **Status**: two builds from one codebase.
 - **`hddsynth.exe`** (Windows 95/98/ME) — working end-to-end, confirmed on real Windows 98
   hardware, through many rounds of real-hardware testing (see Gotchas below).
-- **`hddsynth-nt.exe`** (Windows 2000/XP+) — builds and links cleanly, verified statically only.
-  I don't have any NT-family hardware to test it on, unlike the Win9x build, so treat it as
-  unverified until someone confirms it actually runs. See "Two builds, one codebase" below.
+- **`hddsynth-nt.exe`** (Windows 2000/XP+) — confirmed working on real Windows XP SP3 hardware.
+  I still don't have any NT-family hardware/VM of my own to test against, so this build's
+  verification loop relies on a user confirming behavior on their own machine rather than the
+  round-trip testing `hddsynth.exe` has been through — see "Two builds, one codebase" below.
 
 Versioned with SemVer (`src/version.h`) — pre-1.0 since this hasn't been released yet; I bump
 it with each change.
@@ -86,13 +87,14 @@ Both implement the same `src/diskmon.h` interface (`StartDiskActivityMonitor`/
 else in the app knows or cares which OS family it's running on. The `Makefile` picks the right
 one per target — see `make nt` under Toolchain.
 
-I don't have Windows 2000/XP hardware (or even a VM) to test `hddsynth-nt.exe` against, so
-unlike every other feature in this project it hasn't been through a real-hardware verification
-round — it's unverified beyond compiling and linking cleanly with the expected imports. One
-specific known gap: `PdhAddCounterA` takes the *localized* counter path ("PhysicalDisk"/"Disk
-Bytes/sec" are the English names) and will fail to resolve on a non-English Windows install; the
-locale-independent fix (looking counters up by numeric index via
-`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Perflib`) isn't implemented.
+I don't have Windows 2000/XP hardware (or even a VM) of my own, so `hddsynth-nt.exe` doesn't get
+the same round-trip real-hardware testing loop `hddsynth.exe` has been through — its
+verification has come from a user confirming it directly on real Windows XP SP3 hardware
+(tray/audio/dialogs working as expected, PDH-based disk-activity detection reacting to real
+activity). One specific known gap remains: `PdhAddCounterA` takes the *localized* counter path
+("PhysicalDisk"/"Disk Bytes/sec" are the English names) and will fail to resolve on a
+non-English Windows install; the locale-independent fix (looking counters up by numeric index
+via `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Perflib`) isn't implemented.
 
 ## Project layout
 
@@ -302,11 +304,11 @@ so I've recorded them here rather than leaving them buried in commit history:
   MinGW.org line, or TDM-GCC 4.7.1/4.9.2).
 - **No installer/packaging yet** — currently just a folder (`hddsynth.exe` + `samples/`)
   copied onto the target machine; `hddsynth.exe` expects `samples\` alongside it.
-- **`hddsynth-nt.exe` has never been run** — no Windows 2000/XP hardware or VM available to test
-  it against. It builds cleanly with the expected imports (`pdh.dll` instead of `HKEY_DYN_DATA`
-  registry calls), but that's the extent of verification so far. Needs someone with real
-  NT-family hardware/a VM to confirm the tray/audio/dialogs work as expected and that PDH
-  detection actually reacts to real disk activity, the same way every Win9x feature was checked
-  against real hardware before being considered done.
+- **`hddsynth-nt.exe` has been confirmed working on real Windows XP SP3 hardware** by a user
+  (tray/audio/dialogs behaving as expected, PDH-based disk-activity detection reacting to real
+  activity). I still don't have NT-family hardware or a VM of my own, so this build's ongoing
+  verification depends on user reports rather than the direct round-trip testing loop
+  `hddsynth.exe` gets — treat any *new* NT-specific change as unconfirmed until it's been tried
+  on real hardware again, the same discipline already applied to Win9x changes.
 - **`hddsynth-nt.exe` only resolves English-language PDH counter names** — see "Two builds, one
   codebase" above.
