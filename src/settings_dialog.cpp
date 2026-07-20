@@ -47,6 +47,78 @@ static void UpdateDiagnosticsLabels(HWND hDlg) {
     SetDlgItemTextA(hDlg, IDC_UNDERRUN_LABEL, buf);
 }
 
+// Auto mode picks a backend silently -- show which one it actually
+// landed on so that choice (and any silent fallback away from
+// DirectSound) is visible here too, not just in the About dialog. Only
+// meaningful right after WM_INITDIALOG or a live apply (see
+// ApplySettingsLive) -- NOT on every combo selection change, since
+// selecting a different value in the dropdown doesn't itself change
+// what's active until Applied, and showing it there would be misleading.
+static void UpdateAudioApiStatusLabel(HWND hDlg) {
+    char buf[48];
+    wsprintfA(buf, "Currently active: %s", GetActiveAudioBackendName());
+    SetDlgItemTextA(hDlg, IDC_AUDIOAPI_STATUS, buf);
+}
+
+static const char HELP_TEXT[] =
+    "Volume\r\n"
+    "Overall loudness of everything the app plays.\r\n"
+    "\r\n"
+    "Balance\r\n"
+    "Crossfades between the idle hum and the access sound. All the way "
+    "to \"Idle\" mutes the access sound; all the way to \"Activity\" "
+    "mutes the idle hum.\r\n"
+    "\r\n"
+    "Audio Buffering\r\n"
+    "How much audio is queued ahead of time. Lower values react faster "
+    "when disk activity starts or stops, but are more likely to glitch "
+    "if the system stalls briefly (e.g. during heavy disk I/O). Higher "
+    "values are safer but feel slightly laggier. Use the Diagnostics "
+    "readout below to check whether a setting is actually safe on this "
+    "machine.\r\n"
+    "\r\n"
+    "Minimum Access Playback (ms)\r\n"
+    "Once triggered, the access sound keeps playing for at least this "
+    "long, even if the real disk activity was shorter -- prevents a very "
+    "brief access from being clipped into an abrupt near-silent blip. "
+    "Set too high and the access sound can noticeably outlast the real "
+    "activity.\r\n"
+    "\r\n"
+    "Activity Threshold (bytes/poll)\r\n"
+    "How many bytes must move in one polling interval before it counts "
+    "as \"activity\". Too low and background housekeeping I/O can "
+    "trigger the access sound constantly; too high and real activity "
+    "might not be noticed.\r\n"
+    "\r\n"
+    "Audio API\r\n"
+    "Auto (Recommended) tries DirectSound first and automatically falls "
+    "back to WaveOut/MME if DirectSound isn't usable on this machine -- "
+    "safe for most users. WaveOut/MME is the most compatible option, "
+    "supported by every version of Windows, but has more inherent "
+    "latency. DirectSound can offer lower latency using hardware-"
+    "assisted buffering where available.\r\n"
+    "\r\n"
+    "Diagnostics\r\n"
+    "Latency shows the real measured queued audio delay right now. "
+    "Glitches counts confirmed audible gaps since the audio engine was "
+    "last (re)started. Both exist to help find a buffering setting "
+    "that's actually safe on this machine, rather than guessing.";
+
+static BOOL CALLBACK SettingsHelpDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM) {
+    switch (msg) {
+        case WM_INITDIALOG:
+            SetDlgItemTextA(hDlg, IDC_HELP_TEXT, HELP_TEXT);
+            return TRUE;
+        case WM_COMMAND:
+            if (LOWORD(wp) == IDOK || LOWORD(wp) == IDCANCEL) {
+                EndDialog(hDlg, 0);
+                return TRUE;
+            }
+            break;
+    }
+    return FALSE;
+}
+
 // The buffer slider's floor depends on which backend the "Audio API"
 // combo would resolve to -- DirectSound's own buffering already supports
 // much lower depths than waveOut ever will (see settings.h), so the
@@ -102,6 +174,7 @@ static void ApplySettingsLive(HWND hDlg, const Settings *s) {
     SetAudioApi(s->audioApi);
     SetAudioBufferMs(s->audioBufferMs);
     UpdateBufferSliderRange(hDlg);
+    UpdateAudioApiStatusLabel(hDlg);
 }
 
 static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
@@ -130,11 +203,12 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
             SetDlgItemInt(hDlg, IDC_THRESHOLD_EDIT, s->activityThresholdBytes, FALSE);
 
             HWND hApi = GetDlgItem(hDlg, IDC_AUDIOAPI_COMBO);
-            SendMessageA(hApi, CB_ADDSTRING, 0, (LPARAM)"Auto");
-            SendMessageA(hApi, CB_ADDSTRING, 0, (LPARAM)"WaveOut (MME)");
-            SendMessageA(hApi, CB_ADDSTRING, 0, (LPARAM)"DirectSound");
+            SendMessageA(hApi, CB_ADDSTRING, 0, (LPARAM)"Auto (Recommended)");
+            SendMessageA(hApi, CB_ADDSTRING, 0, (LPARAM)"WaveOut / MME (Compatible)");
+            SendMessageA(hApi, CB_ADDSTRING, 0, (LPARAM)"DirectSound (Lower Latency)");
             SendMessageA(hApi, CB_SETCURSEL, s->audioApi, 0);
             UpdateBufferSliderRange(hDlg);
+            UpdateAudioApiStatusLabel(hDlg);
 
             UpdateDiagnosticsLabels(hDlg);
             SetTimer(hDlg, DIAGNOSTICS_TIMER_ID, 500, NULL);
@@ -177,6 +251,11 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
                 return TRUE;
             } else if (LOWORD(wp) == IDC_AUDIOAPI_COMBO && HIWORD(wp) == CBN_SELCHANGE) {
                 UpdateBufferSliderRange(hDlg);
+                return TRUE;
+            } else if (LOWORD(wp) == IDC_HELP_BUTTON) {
+                HINSTANCE hInst = (HINSTANCE)GetWindowLongPtrA(hDlg, GWLP_HINSTANCE);
+                DialogBoxParamA(hInst, MAKEINTRESOURCEA(IDD_SETTINGSHELP), hDlg,
+                                 SettingsHelpDlgProc, 0);
                 return TRUE;
             } else if (LOWORD(wp) == IDCANCEL) {
                 EndDialog(hDlg, IDCANCEL);
