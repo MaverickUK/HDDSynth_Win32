@@ -33,6 +33,16 @@ bool InitAudio(HWND hwnd, const char *spinupWavPath, const char *idleWavPath,
 // silent fallback is still visible somewhere.
 const char *GetActiveAudioBackendName();
 
+// Switches to a different audioApi choice live, in place -- tears down
+// only the active backend (waveOut or DirectSound) and re-runs the same
+// Auto/Force fallback InitAudio uses, using the hwnd/bufferMs it was
+// last (re)initialized with. The mixer (loaded samples, volume, balance)
+// is untouched, since none of that depends on which backend is active.
+// Returns false only if no backend could be started at all (matches
+// InitAudio's existing failure semantics); a no-op (returns true) if
+// newAudioApi resolves to the backend that's already running.
+bool SetAudioApi(int newAudioApi);
+
 // Real measured queued latency in ms, and a count of confirmed audible
 // gaps (not a prediction -- see the backends for how each one detects an
 // actual gap having happened) since the active backend was last

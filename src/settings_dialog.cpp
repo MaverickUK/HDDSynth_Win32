@@ -71,6 +71,7 @@ static void ApplySettingsLive(const Settings *s) {
     SetAudioBalance(s->balance);
     SetAudioMinPlaybackMs(s->minPlaybackMs);
     SetDiskActivityThreshold(s->activityThresholdBytes);
+    SetAudioApi(s->audioApi);
     SetAudioBufferMs(s->audioBufferMs);
 }
 

@@ -18,14 +18,14 @@ enum AudioBackend { BACKEND_NONE, BACKEND_WAVEOUT, BACKEND_DSOUND };
 
 static AudioBackend g_activeBackend = BACKEND_NONE;
 
-bool InitAudio(HWND hwnd, const char *spinupWavPath, const char *idleWavPath,
-                const char *accessWavPath, int volume, int balance, int minPlaybackMs,
-                int bufferMs, int audioApi) {
-    if (!MixerInit(spinupWavPath, idleWavPath, accessWavPath, volume, balance, minPlaybackMs)) {
-        return false;
-    }
+// Remembered across the app's lifetime so SetAudioApi() can restart just
+// the backend later without needing its caller to re-supply them.
+static HWND g_hwnd;
+static int g_bufferMs;
+static int g_requestedAudioApi = AUDIO_API_AUTO;
 
-    if (audioApi != AUDIO_API_WAVEOUT && DSoundInit(hwnd, bufferMs)) {
+static bool StartBackend(int audioApi) {
+    if (audioApi != AUDIO_API_WAVEOUT && DSoundInit(g_hwnd, g_bufferMs)) {
         g_activeBackend = BACKEND_DSOUND;
         return true;
     }
@@ -33,17 +33,51 @@ bool InitAudio(HWND hwnd, const char *spinupWavPath, const char *idleWavPath,
     // Either WaveOut was explicitly requested, or DirectSound was
     // requested/preferred but isn't usable on this machine (no DirectX
     // installed, no working driver behind it, etc.) -- either way, fall
-    // back to the backend that's always available. InitAudio only fails
-    // outright if this also fails, matching today's original failure
-    // mode (no sound hardware/driver at all).
-    if (WaveOutInit(hwnd, bufferMs)) {
+    // back to the backend that's always available.
+    if (WaveOutInit(g_hwnd, g_bufferMs)) {
         g_activeBackend = BACKEND_WAVEOUT;
         return true;
     }
 
-    MixerShutdown();
     g_activeBackend = BACKEND_NONE;
     return false;
+}
+
+bool InitAudio(HWND hwnd, const char *spinupWavPath, const char *idleWavPath,
+                const char *accessWavPath, int volume, int balance, int minPlaybackMs,
+                int bufferMs, int audioApi) {
+    if (!MixerInit(spinupWavPath, idleWavPath, accessWavPath, volume, balance, minPlaybackMs)) {
+        return false;
+    }
+
+    g_hwnd = hwnd;
+    g_bufferMs = bufferMs;
+    g_requestedAudioApi = audioApi;
+
+    // InitAudio only fails outright if no backend at all could start,
+    // matching the original failure mode (no sound hardware/driver at all).
+    if (StartBackend(audioApi)) {
+        return true;
+    }
+
+    MixerShutdown();
+    return false;
+}
+
+bool SetAudioApi(int newAudioApi) {
+    if (newAudioApi == g_requestedAudioApi && g_activeBackend != BACKEND_NONE) {
+        return true; // nothing to do
+    }
+    g_requestedAudioApi = newAudioApi;
+
+    if (g_activeBackend == BACKEND_DSOUND) {
+        DSoundShutdown();
+    } else if (g_activeBackend == BACKEND_WAVEOUT) {
+        WaveOutShutdown();
+    }
+    g_activeBackend = BACKEND_NONE;
+
+    return StartBackend(newAudioApi);
 }
 
 const char *GetActiveAudioBackendName() {
@@ -74,6 +108,7 @@ void SetAudioMinPlaybackMs(int ms) {
 }
 
 void SetAudioBufferMs(int ms) {
+    g_bufferMs = ms;
     if (g_activeBackend == BACKEND_DSOUND) {
         DSoundSetBufferMs(ms);
     } else if (g_activeBackend == BACKEND_WAVEOUT) {
