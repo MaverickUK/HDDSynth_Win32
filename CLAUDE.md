@@ -12,10 +12,12 @@ Windows 11/Linux) using mingw-w64: `hddsynth.exe` (Windows 95/98/ME) and `hddsyn
 (`diskmon.cpp` vs `diskmon_nt.cpp`, both implementing `diskmon.h` — see README's "Two builds,
 one codebase"). There is no local way to run either built `.exe` — verification is static
 (`objdump`) here. Real behavioral verification happens on the user's actual Windows 98 hardware
-for the Win9x build; **there is currently no hardware/VM to verify `hddsynth-nt.exe` against at
-all**, so treat anything about its runtime behavior as unconfirmed regardless of how clean the
-build looks. Always be explicit about which kind of verification you've actually done, and for
-which target.
+for the Win9x build; `hddsynth-nt.exe` has likewise been confirmed working on real Windows XP
+SP3 hardware (tray/audio/dialogs, PDH-based disk-activity detection) via a user report, but
+**there is still no NT-family hardware/VM available in this environment**, so any *new*
+NT-specific change remains unconfirmed regardless of how clean the build looks until it's
+actually re-tested on real hardware. Always be explicit about which kind of verification you've
+actually done, and for which target.
 
 ## Build
 
@@ -143,7 +145,10 @@ Win9x build (`hddsynth.exe`) is:
    guessing repeatedly — guessing blind wasted multiple hardware-test round-trips earlier in
    this project.
 
-For `hddsynth-nt.exe`, step 2 currently has no hardware/VM to hand off to — there's no real
-verification loop for it at all yet, only the static checks. Don't imply otherwise (e.g. don't
-say a change to `diskmon_nt.cpp` "works," only that it "builds cleanly") until someone actually
-runs it on Windows 2000/XP.
+For `hddsynth-nt.exe`, there's no hardware/VM in this environment to hand off to directly, but a
+user has confirmed it working on real Windows XP SP3 hardware, including PDH-based disk-activity
+detection reacting to real activity — so a real, if less immediate, verification loop exists via
+user reports rather than the direct round-trip `hddsynth.exe` gets. For any *new* NT-specific
+change, still don't imply it works (e.g. don't say a change to `diskmon_nt.cpp` "works," only
+that it "builds cleanly") until it's actually been re-tested on real Windows 2000/XP hardware —
+the prior confirmation covers what was true at that point, not changes made since.
