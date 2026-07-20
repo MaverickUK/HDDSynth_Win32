@@ -22,6 +22,11 @@ void WaveOutSetBufferMs(int ms);
 // currently playing. Returns false if reopening fails.
 bool WaveOutSwitchSamplePack(unsigned long newSampleRate);
 void WaveOutShutdown();
+// Real measured queued latency (ms) and a count of confirmed audible gaps
+// since this backend was last (re)started -- see audio.h's
+// GetAudioLatencyMs/GetAudioUnderrunCount for how these get to the UI.
+int WaveOutGetLatencyMs();
+unsigned long WaveOutGetUnderrunCount();
 
 // DirectSound backend. Returns false from DSoundInit if DirectSound
 // isn't usable on this machine for any reason (dsound.dll missing, no
@@ -33,5 +38,7 @@ bool DSoundInit(HWND hwnd, int bufferMs);
 void DSoundSetBufferMs(int ms);
 bool DSoundSwitchSamplePack(unsigned long newSampleRate);
 void DSoundShutdown();
+int DSoundGetLatencyMs();
+unsigned long DSoundGetUnderrunCount();
 
 #endif

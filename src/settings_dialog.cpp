@@ -37,6 +37,16 @@ static void UpdateBufferLabel(HWND hDlg, int pos) {
     SetDlgItemTextA(hDlg, IDC_BUFFER_LABEL, buf);
 }
 
+#define DIAGNOSTICS_TIMER_ID 1
+
+static void UpdateDiagnosticsLabels(HWND hDlg) {
+    char buf[32];
+    wsprintfA(buf, "Latency: ~%dms", GetAudioLatencyMs());
+    SetDlgItemTextA(hDlg, IDC_LATENCY_LABEL, buf);
+    wsprintfA(buf, "Glitches: %lu", GetAudioUnderrunCount());
+    SetDlgItemTextA(hDlg, IDC_UNDERRUN_LABEL, buf);
+}
+
 static void ReadControlsIntoSettings(HWND hDlg, Settings *s) {
     s->volume = (int)SendMessageA(GetDlgItem(hDlg, IDC_VOLUME_SLIDER), TBM_GETPOS, 0, 0);
     s->balance = (int)SendMessageA(GetDlgItem(hDlg, IDC_BALANCE_SLIDER), TBM_GETPOS, 0, 0);
@@ -94,6 +104,9 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
             SendMessageA(hApi, CB_ADDSTRING, 0, (LPARAM)"WaveOut (MME)");
             SendMessageA(hApi, CB_ADDSTRING, 0, (LPARAM)"DirectSound");
             SendMessageA(hApi, CB_SETCURSEL, s->audioApi, 0);
+
+            UpdateDiagnosticsLabels(hDlg);
+            SetTimer(hDlg, DIAGNOSTICS_TIMER_ID, 500, NULL);
             return TRUE;
         }
         case WM_HSCROLL: {
@@ -110,6 +123,15 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
             }
             return 0;
         }
+        case WM_TIMER:
+            if (wp == DIAGNOSTICS_TIMER_ID) {
+                UpdateDiagnosticsLabels(hDlg);
+                return 0;
+            }
+            break;
+        case WM_DESTROY:
+            KillTimer(hDlg, DIAGNOSTICS_TIMER_ID);
+            break;
         case WM_COMMAND:
             if (LOWORD(wp) == IDOK) {
                 Settings *s = (Settings *)GetWindowLongPtrA(hDlg, GWLP_USERDATA);

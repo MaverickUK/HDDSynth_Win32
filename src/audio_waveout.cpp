@@ -50,6 +50,14 @@ static HANDLE g_thread;
 static volatile LONG g_stopRequested = 0;
 static unsigned long g_currentSampleRate = 0;
 
+// Diagnostics (see audio.h's GetAudioLatencyMs/GetAudioUnderrunCount): total
+// samples handed to the device so far, and a count of times the whole queue
+// was found drained on one wake (WHDR_DONE on every buffer at once -- normally
+// only a subset finish between wakeups, so all of them done means playback
+// ran dry before the refill thread caught up, i.e. an audible gap happened).
+static unsigned long g_samplesWritten = 0;
+static volatile LONG g_underrunCount = 0;
+
 static int MsToBufferCount(int ms) {
     // ~128ms; assumes a 16kHz sample rate, true for every shipped pack.
     // BUFFER_UNIT_SAMPLES is a fixed sample count, so a pack at some
@@ -66,6 +74,7 @@ static int MsToBufferCount(int ms) {
 
 static void FillAndQueue(int index) {
     MixerFillBuffer(g_bufferData[index], BUFFER_UNIT_SAMPLES);
+    g_samplesWritten += BUFFER_UNIT_SAMPLES;
 
     WAVEHDR *hdr = &g_headers[index];
     hdr->lpData = (LPSTR)g_bufferData[index];
@@ -83,11 +92,16 @@ static unsigned __stdcall AudioThreadProc(void *) {
         if (InterlockedExchangeAdd(&g_stopRequested, 0)) {
             break;
         }
+        int doneCount = 0;
         for (int i = 0; i < g_numBuffers; i++) {
             if (g_headers[i].dwFlags & WHDR_DONE) {
+                doneCount++;
                 waveOutUnprepareHeader(g_hWaveOut, &g_headers[i], sizeof(WAVEHDR));
                 FillAndQueue(i);
             }
+        }
+        if (doneCount == g_numBuffers) {
+            InterlockedIncrement(&g_underrunCount);
         }
     }
     return 0;
@@ -148,6 +162,8 @@ static void AllocateAndQueueBuffers() {
 bool WaveOutInit(HWND hwnd, int bufferMs) {
     (void)hwnd;
 
+    g_samplesWritten = 0;
+    g_underrunCount = 0;
     g_numBuffers = MsToBufferCount(bufferMs);
 
     g_event = CreateEventA(NULL, FALSE, FALSE, NULL);
@@ -232,4 +248,25 @@ void WaveOutShutdown() {
         waveOutClose(g_hWaveOut);
         g_hWaveOut = NULL;
     }
+}
+
+int WaveOutGetLatencyMs() {
+    if (!g_hWaveOut || g_currentSampleRate == 0) {
+        return 0;
+    }
+    MMTIME mmt;
+    mmt.wType = TIME_SAMPLES;
+    if (waveOutGetPosition(g_hWaveOut, &mmt, sizeof(mmt)) != MMSYSERR_NOERROR ||
+        mmt.wType != TIME_SAMPLES) {
+        return 0;
+    }
+    unsigned long played = mmt.u.sample;
+    if (played > g_samplesWritten) {
+        return 0; // shouldn't happen, but never report negative latency
+    }
+    return (int)((g_samplesWritten - played) * 1000 / g_currentSampleRate);
+}
+
+unsigned long WaveOutGetUnderrunCount() {
+    return (unsigned long)InterlockedExchangeAdd(&g_underrunCount, 0);
 }

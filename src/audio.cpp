@@ -81,6 +81,24 @@ void SetAudioBufferMs(int ms) {
     }
 }
 
+int GetAudioLatencyMs() {
+    if (g_activeBackend == BACKEND_DSOUND) {
+        return DSoundGetLatencyMs();
+    } else if (g_activeBackend == BACKEND_WAVEOUT) {
+        return WaveOutGetLatencyMs();
+    }
+    return 0;
+}
+
+unsigned long GetAudioUnderrunCount() {
+    if (g_activeBackend == BACKEND_DSOUND) {
+        return DSoundGetUnderrunCount();
+    } else if (g_activeBackend == BACKEND_WAVEOUT) {
+        return WaveOutGetUnderrunCount();
+    }
+    return 0;
+}
+
 bool SwitchAudioSamplePack(const char *spinupWavPath, const char *idleWavPath,
                             const char *accessWavPath) {
     if (!MixerSwitchSamplePack(spinupWavPath, idleWavPath, accessWavPath)) {

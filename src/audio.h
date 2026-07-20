@@ -33,6 +33,14 @@ bool InitAudio(HWND hwnd, const char *spinupWavPath, const char *idleWavPath,
 // silent fallback is still visible somewhere.
 const char *GetActiveAudioBackendName();
 
+// Real measured queued latency in ms, and a count of confirmed audible
+// gaps (not a prediction -- see the backends for how each one detects an
+// actual gap having happened) since the active backend was last
+// (re)started. Meant to help pick a safe "Audio Buffering" setting on
+// real hardware rather than guessing.
+int GetAudioLatencyMs();
+unsigned long GetAudioUnderrunCount();
+
 // Thin pass-throughs to the mixer, so callers only need to depend on
 // audio.h.
 void SetAudioAccessActive(BOOL active);

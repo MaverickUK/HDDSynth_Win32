@@ -66,6 +66,10 @@ static DWORD g_chunkBytes;
 static unsigned long g_currentSampleRate = 0;
 static int g_currentBufferMs = 0;
 
+// Diagnostics (see audio.h's GetAudioLatencyMs/GetAudioUnderrunCount).
+static volatile LONG g_underrunCount = 0;
+static volatile LONG g_lastChunkFilled = 0; // furthest chunk index confirmed freshly refilled
+
 static void FillChunk(int chunkIndex) {
     void *ptr1;
     DWORD bytes1;
@@ -97,7 +101,27 @@ static unsigned __stdcall DSoundThreadProc(void *) {
         if (result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + DS_NUM_CHUNKS) {
             int notifiedChunk = (int)(result - WAIT_OBJECT_0);
             int chunkToFill = (notifiedChunk - 1 + DS_NUM_CHUNKS) % DS_NUM_CHUNKS;
+
+            // The notify fires exactly as the play cursor crosses into
+            // notifiedChunk, i.e. right as it finishes chunkToFill -- so at
+            // the normal, on-time moment the cursor sits about one
+            // chunk-width past chunkToFill's start. If this thread got
+            // scheduled late (system under load), the cursor will have
+            // drifted further than that by the time we actually get here,
+            // meaning it's played into a chunk we haven't refilled yet --
+            // a confirmed glitch, not a guess.
+            DWORD playCursor;
+            if (SUCCEEDED(g_pDSBuffer->GetCurrentPosition(&playCursor, NULL))) {
+                DWORD totalBytes = g_chunkBytes * DS_NUM_CHUNKS;
+                DWORD chunkStart = (DWORD)chunkToFill * g_chunkBytes;
+                DWORD ahead = (playCursor - chunkStart + totalBytes) % totalBytes;
+                if (ahead > g_chunkBytes + g_chunkBytes / 2) {
+                    InterlockedIncrement(&g_underrunCount);
+                }
+            }
+
             FillChunk(chunkToFill);
+            InterlockedExchange(&g_lastChunkFilled, chunkToFill);
         }
     }
     return 0;
@@ -222,6 +246,8 @@ static bool CreateSecondaryBuffer(int bufferMs) {
     g_chunkBytes = chunkBytes;
     g_currentSampleRate = sampleRate;
     g_currentBufferMs = bufferMs;
+    g_underrunCount = 0;
+    g_lastChunkFilled = DS_NUM_CHUNKS - 1; // last chunk is the one we just filled via the initial Lock/Unlock above
     return true;
 }
 
@@ -325,4 +351,29 @@ void DSoundShutdown() {
         FreeLibrary(g_hDSoundDll);
         g_hDSoundDll = NULL;
     }
+}
+
+int DSoundGetLatencyMs() {
+    if (!g_pDSBuffer || g_currentSampleRate == 0) {
+        return 0;
+    }
+    DWORD playCursor;
+    if (FAILED(g_pDSBuffer->GetCurrentPosition(&playCursor, NULL))) {
+        return 0;
+    }
+    DWORD totalBytes = g_chunkBytes * DS_NUM_CHUNKS;
+    // How far the play cursor is from the end of the furthest chunk we've
+    // confirmed holds fresh data -- i.e. the real remaining headroom before
+    // playback would catch up to stale/unfilled audio.
+    DWORD freshEnd = (DWORD)(InterlockedExchangeAdd(&g_lastChunkFilled, 0) + 1) * g_chunkBytes;
+    DWORD remaining = (freshEnd - playCursor + totalBytes) % totalBytes;
+    unsigned long bytesPerMs = (g_currentSampleRate * sizeof(short)) / 1000;
+    if (bytesPerMs == 0) {
+        return 0;
+    }
+    return (int)(remaining / bytesPerMs);
+}
+
+unsigned long DSoundGetUnderrunCount() {
+    return (unsigned long)InterlockedExchangeAdd(&g_underrunCount, 0);
 }
