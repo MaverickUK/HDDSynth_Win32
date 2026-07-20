@@ -1,11 +1,13 @@
-// Settings dialog: three trackbar sliders (volume, balance, audio
-// buffering) plus two edit fields for the less frequently touched
-// tunables (min playback time, activity threshold), plus an Apply button
-// alongside OK/Cancel so changes can be tried live without closing the
-// dialog -- handy for A/B-testing settings against something like a large
-// background file copy. Trackbar is a common control (comctl32.dll,
-// present on Win95+) -- InitCommonControls() must be called once before
-// any dialog containing one is created (done in tray.cpp's WinMain).
+// Settings dialog: grouped into Playback (volume/balance), Disk Activity
+// (min access playback/activity threshold), Audio Engine (buffering/
+// Audio API), and Diagnostics (latency/glitches) group boxes -- all
+// trackbar sliders now, plus an Apply button alongside OK/Cancel so
+// changes can be tried live without closing the dialog -- handy for
+// A/B-testing settings against something like a large background file
+// copy. Trackbar is a common control (comctl32.dll, present on Win95+)
+// -- InitCommonControls() must be called once before any dialog
+// containing one is created (done in tray.cpp's WinMain). A Help button
+// opens SettingsHelp.txt for the explanations that don't fit inline.
 //
 // Apply and OK do the exact same "read controls, save, apply live" work
 // (ReadControlsIntoSettings + ApplySettingsLive below); the only
@@ -17,7 +19,9 @@
 #include "resource.h"
 #include "audio.h"
 #include "diskmon.h"
+#include "paths.h"
 #include <commctrl.h>
+#include <shellapi.h>
 
 static void UpdateVolumeLabel(HWND hDlg, int pos) {
     char buf[16];
@@ -35,6 +39,18 @@ static void UpdateBufferLabel(HWND hDlg, int pos) {
     char buf[16];
     wsprintfA(buf, "%dms", pos);
     SetDlgItemTextA(hDlg, IDC_BUFFER_LABEL, buf);
+}
+
+static void UpdateMinPlayLabel(HWND hDlg, int pos) {
+    char buf[16];
+    wsprintfA(buf, "%dms", pos);
+    SetDlgItemTextA(hDlg, IDC_MINPLAY_LABEL, buf);
+}
+
+static void UpdateThresholdLabel(HWND hDlg, int pos) {
+    char buf[16];
+    wsprintfA(buf, "%d", pos);
+    SetDlgItemTextA(hDlg, IDC_THRESHOLD_LABEL, buf);
 }
 
 #define DIAGNOSTICS_TIMER_ID 1
@@ -60,63 +76,16 @@ static void UpdateAudioApiStatusLabel(HWND hDlg) {
     SetDlgItemTextA(hDlg, IDC_AUDIOAPI_STATUS, buf);
 }
 
-static const char HELP_TEXT[] =
-    "Volume\r\n"
-    "Overall loudness of everything the app plays.\r\n"
-    "\r\n"
-    "Balance\r\n"
-    "Crossfades between the idle hum and the access sound. All the way "
-    "to \"Idle\" mutes the access sound; all the way to \"Activity\" "
-    "mutes the idle hum.\r\n"
-    "\r\n"
-    "Audio Buffering\r\n"
-    "How much audio is queued ahead of time. Lower values react faster "
-    "when disk activity starts or stops, but are more likely to glitch "
-    "if the system stalls briefly (e.g. during heavy disk I/O). Higher "
-    "values are safer but feel slightly laggier. Use the Diagnostics "
-    "readout below to check whether a setting is actually safe on this "
-    "machine.\r\n"
-    "\r\n"
-    "Minimum Access Playback (ms)\r\n"
-    "Once triggered, the access sound keeps playing for at least this "
-    "long, even if the real disk activity was shorter -- prevents a very "
-    "brief access from being clipped into an abrupt near-silent blip. "
-    "Set too high and the access sound can noticeably outlast the real "
-    "activity.\r\n"
-    "\r\n"
-    "Activity Threshold (bytes/poll)\r\n"
-    "How many bytes must move in one polling interval before it counts "
-    "as \"activity\". Too low and background housekeeping I/O can "
-    "trigger the access sound constantly; too high and real activity "
-    "might not be noticed.\r\n"
-    "\r\n"
-    "Audio API\r\n"
-    "Auto (Recommended) tries DirectSound first and automatically falls "
-    "back to WaveOut/MME if DirectSound isn't usable on this machine -- "
-    "safe for most users. WaveOut/MME is the most compatible option, "
-    "supported by every version of Windows, but has more inherent "
-    "latency. DirectSound can offer lower latency using hardware-"
-    "assisted buffering where available.\r\n"
-    "\r\n"
-    "Diagnostics\r\n"
-    "Latency shows the real measured queued audio delay right now. "
-    "Glitches counts confirmed audible gaps since the audio engine was "
-    "last (re)started. Both exist to help find a buffering setting "
-    "that's actually safe on this machine, rather than guessing.";
-
-static BOOL CALLBACK SettingsHelpDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM) {
-    switch (msg) {
-        case WM_INITDIALOG:
-            SetDlgItemTextA(hDlg, IDC_HELP_TEXT, HELP_TEXT);
-            return TRUE;
-        case WM_COMMAND:
-            if (LOWORD(wp) == IDOK || LOWORD(wp) == IDCANCEL) {
-                EndDialog(hDlg, 0);
-                return TRUE;
-            }
-            break;
-    }
-    return FALSE;
+// Opens SettingsHelp.txt (shipped next to the exe, same convention as
+// hddsynth.ini/samples/ -- see paths.h) in whatever the user has
+// associated with .txt, normally Notepad. A plain text file rather than
+// a custom in-app dialog: simpler, and editable/searchable/printable
+// with whatever the user already has, rather than a bespoke read-only
+// control this codebase would otherwise have to maintain.
+static void OpenSettingsHelp(HWND hDlg) {
+    char helpPath[MAX_PATH];
+    BuildExePath(helpPath, sizeof(helpPath), "SettingsHelp.txt");
+    ShellExecuteA(hDlg, "open", helpPath, NULL, NULL, SW_SHOWNORMAL);
 }
 
 // The buffer slider's floor depends on which backend the "Audio API"
@@ -148,17 +117,9 @@ static void ReadControlsIntoSettings(HWND hDlg, Settings *s) {
     s->volume = (int)SendMessageA(GetDlgItem(hDlg, IDC_VOLUME_SLIDER), TBM_GETPOS, 0, 0);
     s->balance = (int)SendMessageA(GetDlgItem(hDlg, IDC_BALANCE_SLIDER), TBM_GETPOS, 0, 0);
     s->audioBufferMs = (int)SendMessageA(GetDlgItem(hDlg, IDC_BUFFER_SLIDER), TBM_GETPOS, 0, 0);
-
-    BOOL ok;
-    int minPlay = GetDlgItemInt(hDlg, IDC_MINPLAY_EDIT, &ok, FALSE);
-    if (ok) {
-        s->minPlaybackMs = minPlay;
-    }
-    int threshold = GetDlgItemInt(hDlg, IDC_THRESHOLD_EDIT, &ok, FALSE);
-    if (ok) {
-        s->activityThresholdBytes = threshold;
-    }
-
+    s->minPlaybackMs = (int)SendMessageA(GetDlgItem(hDlg, IDC_MINPLAY_SLIDER), TBM_GETPOS, 0, 0);
+    s->activityThresholdBytes =
+        (int)SendMessageA(GetDlgItem(hDlg, IDC_THRESHOLD_SLIDER), TBM_GETPOS, 0, 0);
     s->audioApi = (int)SendMessageA(GetDlgItem(hDlg, IDC_AUDIOAPI_COMBO), CB_GETCURSEL, 0, 0);
 }
 
@@ -199,8 +160,18 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
             SendMessageA(hBuf, TBM_SETPOS, TRUE, s->audioBufferMs);
             UpdateBufferLabel(hDlg, s->audioBufferMs);
 
-            SetDlgItemInt(hDlg, IDC_MINPLAY_EDIT, s->minPlaybackMs, FALSE);
-            SetDlgItemInt(hDlg, IDC_THRESHOLD_EDIT, s->activityThresholdBytes, FALSE);
+            HWND hMinPlay = GetDlgItem(hDlg, IDC_MINPLAY_SLIDER);
+            SendMessageA(hMinPlay, TBM_SETRANGE, TRUE, MAKELONG(MIN_MINPLAY_MS, MAX_MINPLAY_MS));
+            SendMessageA(hMinPlay, TBM_SETLINESIZE, 0, 50);
+            SendMessageA(hMinPlay, TBM_SETPOS, TRUE, s->minPlaybackMs);
+            UpdateMinPlayLabel(hDlg, s->minPlaybackMs);
+
+            HWND hThreshold = GetDlgItem(hDlg, IDC_THRESHOLD_SLIDER);
+            SendMessageA(hThreshold, TBM_SETRANGE, TRUE,
+                         MAKELONG(MIN_ACTIVITY_THRESHOLD_BYTES, MAX_ACTIVITY_THRESHOLD_BYTES));
+            SendMessageA(hThreshold, TBM_SETLINESIZE, 0, 256);
+            SendMessageA(hThreshold, TBM_SETPOS, TRUE, s->activityThresholdBytes);
+            UpdateThresholdLabel(hDlg, s->activityThresholdBytes);
 
             HWND hApi = GetDlgItem(hDlg, IDC_AUDIOAPI_COMBO);
             SendMessageA(hApi, CB_ADDSTRING, 0, (LPARAM)"Auto (Recommended)");
@@ -219,12 +190,18 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
             HWND hVol = GetDlgItem(hDlg, IDC_VOLUME_SLIDER);
             HWND hBal = GetDlgItem(hDlg, IDC_BALANCE_SLIDER);
             HWND hBuf = GetDlgItem(hDlg, IDC_BUFFER_SLIDER);
+            HWND hMinPlay = GetDlgItem(hDlg, IDC_MINPLAY_SLIDER);
+            HWND hThreshold = GetDlgItem(hDlg, IDC_THRESHOLD_SLIDER);
             if (hCtl == hVol) {
                 UpdateVolumeLabel(hDlg, (int)SendMessageA(hVol, TBM_GETPOS, 0, 0));
             } else if (hCtl == hBal) {
                 UpdateBalanceLabel(hDlg, (int)SendMessageA(hBal, TBM_GETPOS, 0, 0));
             } else if (hCtl == hBuf) {
                 UpdateBufferLabel(hDlg, (int)SendMessageA(hBuf, TBM_GETPOS, 0, 0));
+            } else if (hCtl == hMinPlay) {
+                UpdateMinPlayLabel(hDlg, (int)SendMessageA(hMinPlay, TBM_GETPOS, 0, 0));
+            } else if (hCtl == hThreshold) {
+                UpdateThresholdLabel(hDlg, (int)SendMessageA(hThreshold, TBM_GETPOS, 0, 0));
             }
             return 0;
         }
@@ -253,9 +230,7 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
                 UpdateBufferSliderRange(hDlg);
                 return TRUE;
             } else if (LOWORD(wp) == IDC_HELP_BUTTON) {
-                HINSTANCE hInst = (HINSTANCE)GetWindowLongPtrA(hDlg, GWLP_HINSTANCE);
-                DialogBoxParamA(hInst, MAKEINTRESOURCEA(IDD_SETTINGSHELP), hDlg,
-                                 SettingsHelpDlgProc, 0);
+                OpenSettingsHelp(hDlg);
                 return TRUE;
             } else if (LOWORD(wp) == IDCANCEL) {
                 EndDialog(hDlg, IDCANCEL);

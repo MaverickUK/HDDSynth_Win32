@@ -13,6 +13,21 @@
 #define MIN_AUDIO_BUFFER_MS_DSOUND 25
 #define MAX_AUDIO_BUFFER_MS 2000
 
+// Slider range for minimum access playback -- 0 (no minimum, the access
+// sound can cut off as soon as activity stops) to 1000ms (a full second
+// of guaranteed playback per trigger).
+#define MIN_MINPLAY_MS 0
+#define MAX_MINPLAY_MS 1000
+
+// Slider range for the activity threshold -- see diskmon.cpp's
+// ACTIVITY_BYTE_THRESHOLD-equivalent comment: the default (2048) is
+// "comfortably below file-copy territory, well above typical idle
+// housekeeping I/O". 0 means any movement at all counts as activity;
+// 32768 is high enough that only sustained heavy transfers would
+// register, without exceeding TBM_SETRANGE's 16-bit-per-bound limit.
+#define MIN_ACTIVITY_THRESHOLD_BYTES 0
+#define MAX_ACTIVITY_THRESHOLD_BYTES 32768
+
 struct Settings {
     int volume;                  // 0-100
     int balance;                 // 0-100, 50 = idle/activity equally loud

@@ -1,0 +1,60 @@
+HDD Synth Win32 - Settings Help
+================================
+
+Volume
+------
+Overall loudness of everything the app plays.
+
+Balance
+-------
+Crossfades between the idle hum and the access sound. All the way to
+"Idle" mutes the access sound; all the way to "Activity" mutes the idle
+hum.
+
+Minimum Access Playback (ms)
+-----------------------------
+Once triggered, the access sound keeps playing for at least this long,
+even if the real disk activity was shorter -- this prevents a very brief
+access from being clipped into an abrupt near-silent blip. Set too high
+and the access sound can noticeably outlast the real activity.
+
+Activity Threshold (bytes/poll)
+--------------------------------
+How many bytes must move in one polling interval before it counts as
+"activity". Too low and background housekeeping I/O can trigger the
+access sound constantly; too high and real activity might not be
+noticed.
+
+Audio Buffering
+----------------
+How much audio is queued ahead of time. Lower values react faster when
+disk activity starts or stops, but are more likely to glitch if the
+system stalls briefly (e.g. during heavy disk I/O). Higher values are
+safer but feel slightly laggier. Use the Diagnostics readout to check
+whether a setting is actually safe on this machine.
+
+Audio API
+---------
+Auto (Recommended) tries DirectSound first and automatically falls back
+to WaveOut/MME if DirectSound isn't usable on this machine -- safe for
+most users.
+
+WaveOut/MME (Compatible) is the most compatible option, supported by
+every version of Windows, but has more inherent latency.
+
+DirectSound (Lower Latency) can offer lower latency using
+hardware-assisted buffering where available.
+
+The "Currently active" line under the dropdown shows which backend is
+actually running right now, which may differ from the chosen option if
+Auto had to fall back, or a forced choice wasn't usable on this machine.
+
+Diagnostics
+-----------
+Latency shows the real measured queued audio delay right now.
+
+Glitches counts confirmed audible gaps since the audio engine was last
+(re)started.
+
+Both exist to help find a buffering setting that's actually safe on
+this machine, rather than guessing.

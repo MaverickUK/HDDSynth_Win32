@@ -10,9 +10,9 @@
 #   2. Clean release build of both targets (make clean && make && make nt),
 #      with the same static Win95-safety checks used throughout development
 #      for the Win9x build (zero CMOV/RDTSC/CPUID, expected DLL import set).
-#   3. Packages build/hddsynth.exe + build/hddsynth-nt.exe + samples/ into a
-#      self-contained folder inside a zip, so extracting it gives something
-#      immediately runnable on whichever OS family it's used on.
+#   3. Packages build/hddsynth.exe + build/hddsynth-nt.exe + SettingsHelp.txt +
+#      samples/ into a self-contained folder inside a zip, so extracting it
+#      gives something immediately runnable on whichever OS family it's used on.
 #   4. Generates release notes from commit messages since the previous tag,
 #      grouped into Features/Fixes/Other by conventional-commit prefix
 #      (feat:/fix:/anything else) -- see "Commit message convention" below.
@@ -87,6 +87,7 @@ PACKAGE_DIR="$STAGE_DIR/$PACKAGE_NAME"
 mkdir -p "$PACKAGE_DIR"
 cp build/hddsynth.exe "$PACKAGE_DIR/"
 cp build/hddsynth-nt.exe "$PACKAGE_DIR/"
+cp SettingsHelp.txt "$PACKAGE_DIR/"
 cp -R samples "$PACKAGE_DIR/samples"
 find "$PACKAGE_DIR" -name ".DS_Store" -delete
 

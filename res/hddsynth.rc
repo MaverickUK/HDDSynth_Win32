@@ -39,7 +39,7 @@ BEGIN
     DEFPUSHBUTTON "OK", IDOK, 85, 68, 50, 14
 END
 
-IDD_SETTINGS DIALOG 0, 0, 230, 311
+IDD_SETTINGS DIALOG 0, 0, 230, 342
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "HDD Synth Settings"
 FONT 8, "MS Sans Serif"
@@ -55,39 +55,32 @@ BEGIN
     LTEXT     "Idle", -1, 10, 79, 30, 10
     RTEXT     "Activity", -1, 120, 79, 40, 10
 
-    GROUPBOX  "Disk Activity", -1, 5, 103, 220, 44
-    LTEXT     "Minimum access playback (ms)", -1, 10, 115, 130, 10
-    EDITTEXT  IDC_MINPLAY_EDIT, 145, 113, 50, 12, ES_NUMBER | ES_AUTOHSCROLL
+    GROUPBOX  "Disk Activity", -1, 5, 103, 220, 75
+    LTEXT     "Minimum access playback", -1, 10, 115, 110, 10
+    CONTROL   "", IDC_MINPLAY_SLIDER, "msctls_trackbar32", 0x00000001, 10, 127, 150, 15
+    LTEXT     "", IDC_MINPLAY_LABEL, 165, 129, 45, 10
 
-    LTEXT     "Activity threshold (bytes/poll)", -1, 10, 131, 130, 10
-    EDITTEXT  IDC_THRESHOLD_EDIT, 145, 129, 50, 12, ES_NUMBER | ES_AUTOHSCROLL
+    LTEXT     "Activity threshold (bytes/poll)", -1, 10, 145, 150, 10
+    CONTROL   "", IDC_THRESHOLD_SLIDER, "msctls_trackbar32", 0x00000001, 10, 157, 150, 15
+    LTEXT     "", IDC_THRESHOLD_LABEL, 165, 159, 45, 10
 
-    GROUPBOX  "Audio Engine", -1, 5, 155, 220, 86
-    LTEXT     "Audio buffering", -1, 10, 167, 80, 10
-    CONTROL   "", IDC_BUFFER_SLIDER, "msctls_trackbar32", 0x00000001, 10, 179, 150, 15
-    LTEXT     "", IDC_BUFFER_LABEL, 165, 181, 45, 10
-    LTEXT     "Low lag", -1, 10, 195, 40, 10
-    RTEXT     "Fewer dropouts", -1, 100, 195, 60, 10
+    GROUPBOX  "Audio Engine", -1, 5, 186, 220, 86
+    LTEXT     "Audio buffering", -1, 10, 198, 80, 10
+    CONTROL   "", IDC_BUFFER_SLIDER, "msctls_trackbar32", 0x00000001, 10, 210, 150, 15
+    LTEXT     "", IDC_BUFFER_LABEL, 165, 212, 45, 10
+    LTEXT     "Low lag", -1, 10, 226, 40, 10
+    RTEXT     "Fewer dropouts", -1, 100, 226, 60, 10
 
-    LTEXT     "Audio API", -1, 10, 211, 60, 10
-    COMBOBOX  IDC_AUDIOAPI_COMBO, 80, 209, 140, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT     "", IDC_AUDIOAPI_STATUS, 10, 225, 210, 10
+    LTEXT     "Audio API", -1, 10, 242, 60, 10
+    COMBOBOX  IDC_AUDIOAPI_COMBO, 80, 240, 140, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT     "", IDC_AUDIOAPI_STATUS, 10, 256, 210, 10
 
-    GROUPBOX  "Diagnostics", -1, 5, 249, 220, 28
-    LTEXT     "", IDC_LATENCY_LABEL, 10, 261, 100, 10
-    LTEXT     "", IDC_UNDERRUN_LABEL, 120, 261, 100, 10
+    GROUPBOX  "Diagnostics", -1, 5, 280, 220, 28
+    LTEXT     "", IDC_LATENCY_LABEL, 10, 292, 100, 10
+    LTEXT     "", IDC_UNDERRUN_LABEL, 120, 292, 100, 10
 
-    PUSHBUTTON    "Help", IDC_HELP_BUTTON, 10, 287, 50, 14
-    DEFPUSHBUTTON "OK", IDOK, 65, 287, 50, 14
-    PUSHBUTTON    "Cancel", IDCANCEL, 120, 287, 50, 14
-    PUSHBUTTON    "Apply", IDC_APPLY_BUTTON, 175, 287, 50, 14
-END
-
-IDD_SETTINGSHELP DIALOG 0, 0, 260, 260
-STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "HDD Synth Settings Help"
-FONT 8, "MS Sans Serif"
-BEGIN
-    EDITTEXT  IDC_HELP_TEXT, 10, 10, 240, 210, ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_VSCROLL
-    DEFPUSHBUTTON "OK", IDOK, 105, 228, 50, 14
+    PUSHBUTTON    "Help", IDC_HELP_BUTTON, 10, 318, 50, 14
+    DEFPUSHBUTTON "OK", IDOK, 65, 318, 50, 14
+    PUSHBUTTON    "Cancel", IDCANCEL, 120, 318, 50, 14
+    PUSHBUTTON    "Apply", IDC_APPLY_BUTTON, 175, 318, 50, 14
 END
