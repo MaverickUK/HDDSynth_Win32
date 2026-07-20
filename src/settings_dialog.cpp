@@ -47,6 +47,31 @@ static void UpdateDiagnosticsLabels(HWND hDlg) {
     SetDlgItemTextA(hDlg, IDC_UNDERRUN_LABEL, buf);
 }
 
+// The buffer slider's floor depends on which backend the "Audio API"
+// combo would resolve to -- DirectSound's own buffering already supports
+// much lower depths than waveOut ever will (see settings.h), so the
+// slider shouldn't cap a DirectSound user at waveOut's more conservative
+// floor, or let a waveOut user drag below the depth that's actually safe
+// on that backend. Called on init, whenever the combo selection changes,
+// and right after a live API switch actually takes effect (Apply/OK),
+// since that's the point where "which backend is really active" can
+// change out from under the slider's current range.
+static void UpdateBufferSliderRange(HWND hDlg) {
+    int apiSel = (int)SendMessageA(GetDlgItem(hDlg, IDC_AUDIOAPI_COMBO), CB_GETCURSEL, 0, 0);
+    bool allowLow = (apiSel == AUDIO_API_DSOUND) ||
+                    (apiSel == AUDIO_API_AUTO &&
+                     lstrcmpA(GetActiveAudioBackendName(), "DirectSound") == 0);
+    int minMs = allowLow ? MIN_AUDIO_BUFFER_MS_DSOUND : MIN_AUDIO_BUFFER_MS;
+
+    HWND hBuf = GetDlgItem(hDlg, IDC_BUFFER_SLIDER);
+    SendMessageA(hBuf, TBM_SETRANGE, TRUE, MAKELONG(minMs, MAX_AUDIO_BUFFER_MS));
+    int pos = (int)SendMessageA(hBuf, TBM_GETPOS, 0, 0);
+    if (pos < minMs) {
+        SendMessageA(hBuf, TBM_SETPOS, TRUE, minMs);
+        UpdateBufferLabel(hDlg, minMs);
+    }
+}
+
 static void ReadControlsIntoSettings(HWND hDlg, Settings *s) {
     s->volume = (int)SendMessageA(GetDlgItem(hDlg, IDC_VOLUME_SLIDER), TBM_GETPOS, 0, 0);
     s->balance = (int)SendMessageA(GetDlgItem(hDlg, IDC_BALANCE_SLIDER), TBM_GETPOS, 0, 0);
@@ -65,7 +90,10 @@ static void ReadControlsIntoSettings(HWND hDlg, Settings *s) {
     s->audioApi = (int)SendMessageA(GetDlgItem(hDlg, IDC_AUDIOAPI_COMBO), CB_GETCURSEL, 0, 0);
 }
 
-static void ApplySettingsLive(const Settings *s) {
+// hDlg is needed here (not just a plain Settings* apply) so the buffer
+// slider's range can be refreshed immediately after a live API switch --
+// see UpdateBufferSliderRange's comment for why that timing matters.
+static void ApplySettingsLive(HWND hDlg, const Settings *s) {
     SaveSettings(s);
     SetAudioVolume(s->volume);
     SetAudioBalance(s->balance);
@@ -73,6 +101,7 @@ static void ApplySettingsLive(const Settings *s) {
     SetDiskActivityThreshold(s->activityThresholdBytes);
     SetAudioApi(s->audioApi);
     SetAudioBufferMs(s->audioBufferMs);
+    UpdateBufferSliderRange(hDlg);
 }
 
 static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
@@ -105,6 +134,7 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
             SendMessageA(hApi, CB_ADDSTRING, 0, (LPARAM)"WaveOut (MME)");
             SendMessageA(hApi, CB_ADDSTRING, 0, (LPARAM)"DirectSound");
             SendMessageA(hApi, CB_SETCURSEL, s->audioApi, 0);
+            UpdateBufferSliderRange(hDlg);
 
             UpdateDiagnosticsLabels(hDlg);
             SetTimer(hDlg, DIAGNOSTICS_TIMER_ID, 500, NULL);
@@ -137,13 +167,16 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
             if (LOWORD(wp) == IDOK) {
                 Settings *s = (Settings *)GetWindowLongPtrA(hDlg, GWLP_USERDATA);
                 ReadControlsIntoSettings(hDlg, s);
-                ApplySettingsLive(s);
+                ApplySettingsLive(hDlg, s);
                 EndDialog(hDlg, IDOK);
                 return TRUE;
             } else if (LOWORD(wp) == IDC_APPLY_BUTTON) {
                 Settings *s = (Settings *)GetWindowLongPtrA(hDlg, GWLP_USERDATA);
                 ReadControlsIntoSettings(hDlg, s);
-                ApplySettingsLive(s);
+                ApplySettingsLive(hDlg, s);
+                return TRUE;
+            } else if (LOWORD(wp) == IDC_AUDIOAPI_COMBO && HIWORD(wp) == CBN_SELCHANGE) {
+                UpdateBufferSliderRange(hDlg);
                 return TRUE;
             } else if (LOWORD(wp) == IDCANCEL) {
                 EndDialog(hDlg, IDCANCEL);

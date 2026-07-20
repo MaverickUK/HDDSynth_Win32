@@ -1,10 +1,16 @@
 #ifndef HDDSYNTH_SETTINGS_H
 #define HDDSYNTH_SETTINGS_H
 
-// Matches audio.cpp's MIN_BUFFERS/MAX_BUFFERS (~256ms/~2048ms); kept as
-// round numbers here since this is the user-facing slider range, not
-// derived from the exact buffer-unit arithmetic.
-#define MIN_AUDIO_BUFFER_MS 250
+// Matches audio_waveout.cpp's MIN_BUFFERS/MAX_BUFFERS (~100ms/~2000ms);
+// kept as round numbers here since this is the user-facing slider range,
+// not derived from the exact buffer-unit arithmetic. This is the floor
+// for the waveOut backend specifically -- DirectSound's own chunking
+// already supports going much lower (see MIN_AUDIO_BUFFER_MS_DSOUND),
+// since hardware-assisted buffering is the whole reason it was added.
+// The Settings dialog picks which floor applies based on which backend
+// is actually active.
+#define MIN_AUDIO_BUFFER_MS 100
+#define MIN_AUDIO_BUFFER_MS_DSOUND 25
 #define MAX_AUDIO_BUFFER_MS 2000
 
 struct Settings {

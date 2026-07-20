@@ -37,9 +37,9 @@
 // answer, it depends on the machine and what's more annoying to a given
 // user, lag or the occasional dropout during something like a Scandisk
 // surface scan.
-#define BUFFER_UNIT_SAMPLES 2048 // ~128ms at 16kHz; fixed refill granularity
-#define MIN_BUFFERS 2             // ~256ms floor
-#define MAX_BUFFERS 16            // ~2048ms ceiling; also the fixed array size below
+#define BUFFER_UNIT_SAMPLES 800 // ~50ms at 16kHz; fixed refill granularity
+#define MIN_BUFFERS 2             // ~100ms floor
+#define MAX_BUFFERS 40            // ~2000ms ceiling; also the fixed array size below
 
 static HWAVEOUT g_hWaveOut;
 static WAVEHDR g_headers[MAX_BUFFERS];
