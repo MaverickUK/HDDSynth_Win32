@@ -40,9 +40,10 @@ i686-w64-mingw32-objdump -p build/hddsynth.exe | grep "DLL Name"
 ```
 
 Expected DLL set for `hddsynth.exe` (Win9x): `KERNEL32`, `USER32`, `GDI32`, `SHELL32`, `msvcrt`,
-`WINMM`, `ADVAPI32`, `COMCTL32`. For `hddsynth-nt.exe`: the same, but `ADVAPI32` replaced by
-`PDH` (no registry calls in `diskmon_nt.cpp`). A new dependency outside these sets is worth a
-second look before assuming it's fine.
+`WINMM`, `ADVAPI32`, `COMCTL32`. For `hddsynth-nt.exe`: the same, plus `PDH` (`diskmon_nt.cpp`'s
+disk-activity counters) -- `ADVAPI32` is needed by both targets now, since `autostart.cpp`'s
+registry-based "Run at Windows Startup" toggle is shared code, not gated by the OS-family seam.
+A new dependency outside these sets is worth a second look before assuming it's fine.
 
 ## Hard rules (violating these breaks the build or silently breaks compatibility)
 

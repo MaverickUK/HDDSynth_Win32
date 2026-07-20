@@ -116,6 +116,7 @@ Makefile    Cross-compilation build rules
 | `src/diskmon.cpp` / `diskmon.h` | Win9x disk-activity monitor (`HKEY_DYN_DATA\PerfStats`) + the shared interface header |
 | `src/diskmon_nt.cpp` | Windows 2000/XP+ disk-activity monitor (PDH) — same interface, only one of the two is linked in per build |
 | `src/settings.cpp` / `settings.h` | `hddsynth.ini` load/save |
+| `src/autostart.cpp` / `.h` | "Run at Windows Startup" via the per-user registry Run key |
 | `src/settings_dialog.cpp` / `.h` | Settings dialog (volume/balance sliders, threshold/min-playback edits) |
 | `src/about_dialog.cpp` / `.h` | About box |
 | `src/samplepack.cpp` / `.h` | Scans `samples\` for pack subfolders, builds per-pack WAV paths |
@@ -194,8 +195,10 @@ IDE or VM needed just to *build* the code, only to *run and test* it.
   since this codebase only uses native Win32 threading regardless of target).
 - **Static linking, both targets**: `-static -static-libgcc -static-libstdc++`, so the only DLLs
   either exe depends on are ones Windows itself ships — `hddsynth.exe` needs `kernel32`,
-  `user32`, `gdi32`, `shell32`, `msvcrt`, `winmm`, `advapi32`, `comctl32`; `hddsynth-nt.exe` swaps
-  `advapi32` for `pdh` (see "Two builds, one codebase"). No GCC runtime redistributable to
+  `user32`, `gdi32`, `shell32`, `msvcrt`, `winmm`, `advapi32`, `comctl32`; `hddsynth-nt.exe` needs
+  all of those too, plus `pdh` (see "Two builds, one codebase") — `advapi32` used to be
+  Win9x-only (`diskmon.cpp`'s registry reads), but `autostart.cpp`'s "Run at Windows Startup"
+  registry toggle is shared code, so both targets need it now. No GCC runtime redistributable to
   install on the target machine either way.
 - **Subsystem stamping**: 4.0 (Win95-era) for `hddsynth.exe`, 5.0 (Windows 2000 — the lower of
   2000/XP, so both accept it) for `hddsynth-nt.exe`.

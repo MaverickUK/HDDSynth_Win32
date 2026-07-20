@@ -1,5 +1,6 @@
 // Tray shell: hidden message-only-style window, tray icon, right-click
-// menu (Sample pack submenu, Settings, About, Exit). Exposes
+// menu (Sample pack submenu, Settings, About, Run at Windows Startup,
+// Exit). Exposes
 // SetTrayActive() so other subsystems can flip the icon between gray
 // (idle) and green (activity) without knowing anything about window
 // messages.
@@ -16,11 +17,13 @@
 #include "settings_dialog.h"
 #include "about_dialog.h"
 #include "samplepack.h"
+#include "autostart.h"
 
 #define WM_TRAYICON (WM_APP + 1)
 #define ID_TRAY_EXIT 1001
 #define ID_TRAY_SETTINGS 1002
 #define ID_TRAY_ABOUT 1003
+#define ID_TRAY_AUTOSTART 1004
 #define ID_TRAY_SAMPLE_BASE 2000
 
 static NOTIFYICONDATAA g_nid;
@@ -82,6 +85,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 }
                 AppendMenuA(menu, MF_STRING, ID_TRAY_SETTINGS, "Settings...");
                 AppendMenuA(menu, MF_STRING, ID_TRAY_ABOUT, "About...");
+                AppendMenuA(menu, MF_STRING | (IsAutoStartEnabled() ? MF_CHECKED : 0),
+                            ID_TRAY_AUTOSTART, "Run at Windows Startup");
                 AppendMenuA(menu, MF_SEPARATOR, 0, NULL);
                 AppendMenuA(menu, MF_STRING, ID_TRAY_EXIT, "Exit");
 
@@ -97,6 +102,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 ShowSettingsDialog(hwnd, g_hInst, &g_settings);
             } else if (LOWORD(wp) == ID_TRAY_ABOUT) {
                 ShowAboutDialog(hwnd, g_hInst);
+            } else if (LOWORD(wp) == ID_TRAY_AUTOSTART) {
+                SetAutoStartEnabled(!IsAutoStartEnabled());
             } else if (LOWORD(wp) >= ID_TRAY_SAMPLE_BASE &&
                        LOWORD(wp) < ID_TRAY_SAMPLE_BASE + g_menuPackCount) {
                 SwitchToSamplePack(g_menuPackNames[LOWORD(wp) - ID_TRAY_SAMPLE_BASE]);

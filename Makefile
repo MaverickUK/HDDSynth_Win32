@@ -67,11 +67,11 @@ $(BUILD)/hddsynth.res.o: res/hddsynth.rc res/gray.ico res/green.ico res/hddsynth
 # differs per OS family is the disk-activity monitor implementation.
 COMMON_SRCS := src/tray.cpp src/audio.cpp src/audio_waveout.cpp src/audio_dsound.cpp \
                src/mixer.cpp src/wav.cpp \
-               src/paths.cpp src/samplepack.cpp src/settings.cpp \
+               src/paths.cpp src/samplepack.cpp src/settings.cpp src/autostart.cpp \
                src/about_dialog.cpp src/settings_dialog.cpp
 COMMON_HDRS := src/audio.h src/audio_backend.h src/mixer.h src/wav.h src/diskmon.h src/paths.h \
-               src/samplepack.h src/settings.h src/about_dialog.h src/settings_dialog.h \
-               src/version.h src/resource.h
+               src/samplepack.h src/settings.h src/autostart.h src/about_dialog.h \
+               src/settings_dialog.h src/version.h src/resource.h
 
 HDDSYNTH_SRCS := $(COMMON_SRCS) src/diskmon.cpp
 HDDSYNTH_NT_SRCS := $(COMMON_SRCS) src/diskmon_nt.cpp
@@ -82,7 +82,7 @@ $(BUILD)/hddsynth.exe: $(HDDSYNTH_SRCS) $(COMMON_HDRS) $(BUILD)/hddsynth.res.o
 
 $(BUILD)/hddsynth-nt.exe: $(HDDSYNTH_NT_SRCS) $(COMMON_HDRS) $(BUILD)/hddsynth.res.o
 	mkdir -p $(BUILD)
-	$(CXX) $(NT_CXXFLAGS) $(HDDSYNTH_NT_SRCS) $(BUILD)/hddsynth.res.o -o $@ $(NT_LDFLAGS) -lshell32 -luser32 -lgdi32 -lkernel32 -lwinmm -lcomctl32 -lpdh
+	$(CXX) $(NT_CXXFLAGS) $(HDDSYNTH_NT_SRCS) $(BUILD)/hddsynth.res.o -o $@ $(NT_LDFLAGS) -lshell32 -luser32 -lgdi32 -lkernel32 -lwinmm -ladvapi32 -lcomctl32 -lpdh
 
 clean:
 	rm -rf $(BUILD)
