@@ -23,10 +23,21 @@
 // ACTIVITY_BYTE_THRESHOLD-equivalent comment: the default (2048) is
 // "comfortably below file-copy territory, well above typical idle
 // housekeeping I/O". 0 means any movement at all counts as activity;
-// 32768 is high enough that only sustained heavy transfers would
+// 32767 is high enough that only sustained heavy transfers would
 // register, without exceeding TBM_SETRANGE's 16-bit-per-bound limit.
+//
+// That limit is a SIGNED 16-bit range (-32768..32767), not 0..65535: the
+// min/max passed to TBM_SETRANGE are packed into a WORD each via
+// MAKELONG, but the trackbar control itself interprets them as signed
+// shorts internally. 32768 (0x8000) is exactly one past the positive
+// signed limit, so it silently wraps to -32768 -- the range ends up
+// inverted (min 0, max -32768), and the whole slider stops working
+// (reads back as 0, dragging produces garbage negative positions). This
+// was already wrong before -- it just went unnoticed until code that
+// reads the range back via TBM_GETRANGEMAX (rather than only ever using
+// this constant directly) was added and inherited the corruption.
 #define MIN_ACTIVITY_THRESHOLD_BYTES 0
-#define MAX_ACTIVITY_THRESHOLD_BYTES 32768
+#define MAX_ACTIVITY_THRESHOLD_BYTES 32767
 
 struct Settings {
     int idleVolume;               // 0-100

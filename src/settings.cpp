@@ -45,7 +45,16 @@ void LoadSettings(Settings *out) {
     if (out->spinupVolume < 0) out->spinupVolume = 0;
     if (out->spinupVolume > 100) out->spinupVolume = 100;
     if (out->minPlaybackMs < 0) out->minPlaybackMs = 0;
-    if (out->activityThresholdBytes < 0) out->activityThresholdBytes = 0;
+    if (out->activityThresholdBytes < MIN_ACTIVITY_THRESHOLD_BYTES) {
+        out->activityThresholdBytes = MIN_ACTIVITY_THRESHOLD_BYTES;
+    }
+    // Also guards against an old hddsynth.ini still holding the previous
+    // (buggy) max of 32768 -- see settings.h's MAX_ACTIVITY_THRESHOLD_BYTES
+    // comment. Without this clamp, that stale value would feed straight
+    // into TBM_SETPOS and reproduce the exact same corruption on load.
+    if (out->activityThresholdBytes > MAX_ACTIVITY_THRESHOLD_BYTES) {
+        out->activityThresholdBytes = MAX_ACTIVITY_THRESHOLD_BYTES;
+    }
     if (out->audioBufferMs < MIN_AUDIO_BUFFER_MS) out->audioBufferMs = MIN_AUDIO_BUFFER_MS;
     if (out->audioBufferMs > MAX_AUDIO_BUFFER_MS) out->audioBufferMs = MAX_AUDIO_BUFFER_MS;
     if (out->audioApi < AUDIO_API_AUTO || out->audioApi > AUDIO_API_DSOUND) {

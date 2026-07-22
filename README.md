@@ -314,6 +314,16 @@ so I've recorded them here rather than leaving them buried in commit history:
   Spin-up volume sliders instead, which is a strictly more flexible model (a crossfade is just
   one specific relationship between two volumes; independent sliders can reproduce that
   relationship or any other), so the whole Balance concept was removed rather than fixed further.
+- **`TBM_SETRANGE`'s min/max are packed into a `WORD` each via `MAKELONG`, but the trackbar
+  control interprets them as *signed* 16-bit values internally** -- so the real usable range is
+  -32768..32767, not 0..65535 like an unsigned WORD would suggest. `MAX_ACTIVITY_THRESHOLD_BYTES`
+  was set to 32768 (0x8000), one past the positive signed limit, so it silently wrapped to
+  -32768: the range ended up inverted (min 0, max -32768), which made the Activity Threshold
+  slider read back as 0 on load and produce garbage negative positions when dragged. This bug
+  predates the fix -- it just went unnoticed until code that reads the range back via
+  `TBM_GETRANGEMAX` (rather than only ever consulting the compile-time constant directly) was
+  added and inherited the corruption, and a user caught it on real Windows 98 hardware. Fixed by
+  lowering the constant to the actual signed limit (32767).
 - **The Pentium-safe CRT sysroot (`/tmp/mingw-pentium-sysroot`, see Toolchain) can go missing or
   incomplete without the build failing or even warning.** `-B`/`-L` just add it to the linker's
   search path; if `crt2.o`/`libmingw32.a`/`libmingwex.a` aren't there, the linker silently falls
