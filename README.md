@@ -307,6 +307,17 @@ so I've recorded them here rather than leaving them buried in commit history:
   left idle audible. Fixed to a straight linear crossfade (`100 - balance` / `balance`) so the
   extremes actually reach full mute, at the cost of each layer only being at 50% (not 100%) at
   the center — Volume still scales the combined result if that reads as quieter overall.
+- **The Pentium-safe CRT sysroot (`/tmp/mingw-pentium-sysroot`, see Toolchain) can go missing or
+  incomplete without the build failing or even warning.** `-B`/`-L` just add it to the linker's
+  search path; if `crt2.o`/`libmingw32.a`/`libmingwex.a` aren't there, the linker silently falls
+  through to Homebrew's stock (CMOV-using) copies elsewhere on its path instead — the build still
+  succeeds, the binary still runs fine here (under emulation, on a modern CPU), and only on real
+  Win9x-era hardware does it GPF with "invalid instruction" at startup. This actually happened
+  once the sysroot's `/tmp` location got wiped/incomplete between sessions. The `Makefile` now
+  has a `check-pentium-crt` step that fails loudly (checks `crt2.o` specifically) before linking
+  `hddsynth.exe`, so this can't go unnoticed again — but the underlying lesson is that a "missing
+  static archive" failure mode for something load-bearing needs to be a build error, not a
+  silent fallback, the moment it's plausible for the file to not be there.
 
 ## Open items
 

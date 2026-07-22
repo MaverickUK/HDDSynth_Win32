@@ -26,6 +26,16 @@ CXXFLAGS := -O2 -march=pentium -mtune=pentium -mcrtdll=msvcrt-os \
 # On a real/emulated Pentium (no CMOV) that's an illegal-instruction crash at startup,
 # before main() is even reached. PENTIUM_CRT is our own rebuild of just those pieces
 # (see tools/build-pentium-crt.sh), and -B/-L here make the linker prefer it.
+#
+# This lives under /tmp, which isn't guaranteed to survive a reboot or
+# persist across environments -- and critically, if crt2.o/libmingw32.a/
+# libmingwex.a are missing from it, -B/-L don't error, they just silently
+# fall through to the stock P6+ objects elsewhere on the linker's search
+# path, producing a binary that looks fine (builds, links, runs under
+# emulation) but GPFs with an illegal instruction the moment it's run on a
+# real Pentium -- exactly what happened the one time this went unnoticed
+# (see the check-pentium-crt target below, which exists so that failure is
+# loud instead of silent).
 PENTIUM_CRT := /tmp/mingw-pentium-sysroot/lib
 
 # -s strips symbols: this is a background app that needs to stay light,
@@ -37,16 +47,16 @@ LDFLAGS  := -mwindows -no-pthread -mcrtdll=msvcrt-os -static -static-libgcc -sta
 
 BUILD := build
 
-.PHONY: all spike hddsynth clean
+.PHONY: all spike hddsynth clean check-pentium-crt
 all: spike hddsynth
 
 spike: $(BUILD)/hddsynth_spike.exe
 
 hddsynth: $(BUILD)/hddsynth.exe
 
-$(BUILD)/hddsynth_spike.exe: src/spike_main.cpp
+$(BUILD)/hddsynth_spike.exe: check-pentium-crt src/spike_main.cpp
 	mkdir -p $(BUILD)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS) -lshell32 -luser32 -lgdi32 -lkernel32
+	$(CXX) $(CXXFLAGS) src/spike_main.cpp -o $@ $(LDFLAGS) -lshell32 -luser32 -lgdi32 -lkernel32
 
 $(BUILD)/hddsynth.res.o: res/hddsynth.rc res/gray.ico res/green.ico res/hddsynthlogo.bmp res/hddsynth.manifest src/resource.h
 	mkdir -p $(BUILD)
@@ -63,7 +73,18 @@ COMMON_HDRS := src/audio.h src/audio_backend.h src/mixer.h src/wav.h src/diskmon
                src/samplepack.h src/settings.h src/autostart.h src/about_dialog.h \
                src/settings_dialog.h src/version.h src/resource.h
 
-$(BUILD)/hddsynth.exe: $(COMMON_SRCS) $(COMMON_HDRS) $(BUILD)/hddsynth.res.o
+# crt2.o is the one file whose absence here means -B/-L silently missed the
+# whole Pentium-safe archive set and fell back to the stock (CMOV-using)
+# CRT -- see the PENTIUM_CRT comment above. Runs before every hddsynth.exe
+# build so that failure is a clear error, not a binary that crashes on real
+# Win9x-era hardware weeks later.
+check-pentium-crt:
+	@test -f $(PENTIUM_CRT)/crt2.o || { \
+		echo "error: Pentium-safe CRT not found at $(PENTIUM_CRT) -- run tools/build-pentium-crt.sh first" >&2; \
+		exit 1; \
+	}
+
+$(BUILD)/hddsynth.exe: check-pentium-crt $(COMMON_SRCS) $(COMMON_HDRS) $(BUILD)/hddsynth.res.o
 	mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) $(COMMON_SRCS) $(BUILD)/hddsynth.res.o -o $@ $(LDFLAGS) -lshell32 -luser32 -lgdi32 -lkernel32 -lwinmm -ladvapi32 -lcomctl32
 

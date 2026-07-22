@@ -31,6 +31,14 @@ make                          # builds build/hddsynth_spike.exe and build/hddsyn
 make clean
 ```
 
+`tools/build-pentium-crt.sh` installs to `/tmp/mingw-pentium-sysroot`, which isn't guaranteed to
+persist (a fresh environment, a reboot, or `/tmp` getting cleared all wipe it). `make` now fails
+loudly with a clear error if it's missing (`check-pentium-crt` target checks for `crt2.o`) rather
+than silently linking Homebrew's stock CRT instead — which contains CMOV and previously caused a
+real "invalid instruction" crash on a user's Windows 98 machine before this check existed. If you
+ever see that error, just re-run `tools/build-pentium-crt.sh` (it re-downloads/rebuilds from
+scratch, a few minutes) before building again.
+
 After every change, before handing off for testing:
 
 ```sh
