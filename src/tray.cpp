@@ -1,6 +1,7 @@
 // Tray shell: hidden message-only-style window, tray icon, right-click
 // menu (Sample pack submenu, Settings, About, Run at Windows Startup,
-// Exit). Exposes
+// Exit), each item shown with an icon via SetMenuItemBitmaps (see
+// tools/make_menu_icons.py for how those are generated). Exposes
 // SetTrayActive() so other subsystems can flip the icon between gray
 // (idle) and green (activity) without knowing anything about window
 // messages.
@@ -33,6 +34,16 @@ static HICON g_iconGray;
 static HICON g_iconGreen;
 static BOOL g_active = FALSE;
 static Settings g_settings;
+
+// Context-menu item icons (see tools/make_menu_icons.py) -- loaded once at
+// startup and reused for every menu rebuild, since SetMenuItemBitmaps just
+// references the HBITMAP handle rather than taking ownership of a copy.
+static HBITMAP g_bmpSample;
+static HBITMAP g_bmpSettings;
+static HBITMAP g_bmpAbout;
+static HBITMAP g_bmpAutostartOn;
+static HBITMAP g_bmpAutostartOff;
+static HBITMAP g_bmpExit;
 
 // Rebuilt each time the context menu is opened (WM_TRAYICON) and consulted
 // again when the resulting WM_COMMAND arrives, so dynamically assigned
@@ -71,6 +82,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
                 g_menuPackCount = ScanSamplePacks(g_menuPackNames, SAMPLEPACK_MAX_PACKS);
 
+                // Position counter for SetMenuItemBitmaps below -- the Sample
+                // submenu is appended as MF_POPUP (no command ID of its own),
+                // so MF_BYPOSITION is used uniformly rather than mixing it
+                // with MF_BYCOMMAND for the rest.
+                UINT pos = 0;
+
                 HMENU menu = CreatePopupMenu();
                 if (g_menuPackCount > 0) {
                     HMENU sampleMenu = CreatePopupMenu();
@@ -82,13 +99,19 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                         AppendMenuA(sampleMenu, flags, ID_TRAY_SAMPLE_BASE + i, g_menuPackNames[i]);
                     }
                     AppendMenuA(menu, MF_POPUP, (UINT_PTR)sampleMenu, "Sample");
+                    SetMenuItemBitmaps(menu, pos++, MF_BYPOSITION, g_bmpSample, g_bmpSample);
                 }
                 AppendMenuA(menu, MF_STRING, ID_TRAY_SETTINGS, "Settings...");
+                SetMenuItemBitmaps(menu, pos++, MF_BYPOSITION, g_bmpSettings, g_bmpSettings);
                 AppendMenuA(menu, MF_STRING, ID_TRAY_ABOUT, "About...");
+                SetMenuItemBitmaps(menu, pos++, MF_BYPOSITION, g_bmpAbout, g_bmpAbout);
                 AppendMenuA(menu, MF_STRING | (IsAutoStartEnabled() ? MF_CHECKED : 0),
                             ID_TRAY_AUTOSTART, "Run at Windows Startup");
+                SetMenuItemBitmaps(menu, pos++, MF_BYPOSITION, g_bmpAutostartOff, g_bmpAutostartOn);
                 AppendMenuA(menu, MF_SEPARATOR, 0, NULL);
+                pos++;
                 AppendMenuA(menu, MF_STRING, ID_TRAY_EXIT, "Exit");
+                SetMenuItemBitmaps(menu, pos++, MF_BYPOSITION, g_bmpExit, g_bmpExit);
 
                 SetForegroundWindow(hwnd);
                 TrackPopupMenu(menu, TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd, NULL);
@@ -153,6 +176,13 @@ HWND CreateTrayShell(HINSTANCE hInst) {
                                     16, 16, LR_DEFAULTCOLOR);
     g_iconGreen = (HICON)LoadImageA(hInst, MAKEINTRESOURCEA(IDI_GREEN), IMAGE_ICON,
                                      16, 16, LR_DEFAULTCOLOR);
+
+    g_bmpSample = LoadBitmapA(hInst, MAKEINTRESOURCEA(IDB_MENU_SAMPLE));
+    g_bmpSettings = LoadBitmapA(hInst, MAKEINTRESOURCEA(IDB_MENU_SETTINGS));
+    g_bmpAbout = LoadBitmapA(hInst, MAKEINTRESOURCEA(IDB_MENU_ABOUT));
+    g_bmpAutostartOn = LoadBitmapA(hInst, MAKEINTRESOURCEA(IDB_MENU_AUTOSTART_ON));
+    g_bmpAutostartOff = LoadBitmapA(hInst, MAKEINTRESOURCEA(IDB_MENU_AUTOSTART_OFF));
+    g_bmpExit = LoadBitmapA(hInst, MAKEINTRESOURCEA(IDB_MENU_EXIT));
 
     ZeroMemory(&g_nid, sizeof(g_nid));
     g_nid.cbSize = sizeof(NOTIFYICONDATAA);

@@ -9,6 +9,13 @@
 
 #define IDB_LOGO 300
 
+#define IDB_MENU_SAMPLE        301
+#define IDB_MENU_SETTINGS      302
+#define IDB_MENU_ABOUT         303
+#define IDB_MENU_AUTOSTART_ON  304
+#define IDB_MENU_AUTOSTART_OFF 305
+#define IDB_MENU_EXIT          306
+
 #define IDC_ABOUT_LOGO    1100
 #define IDC_ABOUT_APPNAME 1102
 #define IDC_ABOUT_VERSION 1103
