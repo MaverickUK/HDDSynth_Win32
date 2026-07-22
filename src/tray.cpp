@@ -113,6 +113,21 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             SetTrayActive((BOOL)wp);
             SetAudioAccessActive((BOOL)wp);
             return 0;
+        case WM_QUERYENDSESSION:
+            // Don't veto shutdown/logoff -- just make sure the real cleanup
+            // (WM_ENDSESSION below) gets a chance to run first.
+            return TRUE;
+        case WM_ENDSESSION:
+            // wp is TRUE only once the session is actually ending (a prior
+            // WM_QUERYENDSESSION from this or another app can still cancel
+            // it, in which case wp is FALSE here and nothing should happen).
+            // Tear down through the same DestroyWindow -> WM_DESTROY path
+            // Exit already uses, so playback stops immediately rather than
+            // racing Windows' own audio-driver teardown and glitching.
+            if (wp) {
+                DestroyWindow(hwnd);
+            }
+            return 0;
         case WM_DESTROY:
             StopDiskActivityMonitor();
             ShutdownAudio();
