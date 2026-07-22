@@ -7,12 +7,13 @@
 # What it does, in order:
 #   1. Reads the version string from src/version.h (single source of truth --
 #      bump that file first, this script doesn't decide the version for you).
-#   2. Clean release build of both targets (make clean && make && make nt),
-#      with the same static Win95-safety checks used throughout development
-#      for the Win9x build (zero CMOV/RDTSC/CPUID, expected DLL import set).
-#   3. Packages build/hddsynth.exe + build/hddsynth-nt.exe + SettingsHelp.txt +
-#      samples/ into a self-contained folder inside a zip, so extracting it
-#      gives something immediately runnable on whichever OS family it's used on.
+#   2. Clean release build (make clean && make), with the same static
+#      Win95-safety checks used throughout development (zero CMOV/RDTSC/CPUID,
+#      expected DLL import set) -- the one binary covers both Win9x and
+#      NT-family Windows, so these checks apply to it unconditionally.
+#   3. Packages build/hddsynth.exe + SettingsHelp.txt + samples/ into a
+#      self-contained folder inside a zip, so extracting it gives something
+#      immediately runnable on whichever OS family it's used on.
 #   4. Generates release notes from commit messages since the previous tag,
 #      grouped into Features/Fixes/Other by conventional-commit prefix
 #      (feat:/fix:/anything else) -- see "Commit message convention" below.
@@ -63,7 +64,6 @@ fi
 echo "--- Building ---"
 make clean
 make
-make nt
 
 DISASM=$(mktemp)
 i686-w64-mingw32-objdump -d build/hddsynth.exe > "$DISASM"
@@ -75,18 +75,12 @@ if [ "$BAD_INSNS" != "0" ]; then
 fi
 echo "Static safety check passed: 0 cmov/rdtsc/cpuid instructions in build/hddsynth.exe."
 
-if [ ! -f build/hddsynth-nt.exe ]; then
-    echo "build/hddsynth-nt.exe missing after 'make nt' -- aborting." >&2
-    exit 1
-fi
-
 echo "--- Packaging ---"
 STAGE_DIR=$(mktemp -d)
 PACKAGE_NAME="HDDSynth-Win32-$TAG"
 PACKAGE_DIR="$STAGE_DIR/$PACKAGE_NAME"
 mkdir -p "$PACKAGE_DIR"
 cp build/hddsynth.exe "$PACKAGE_DIR/"
-cp build/hddsynth-nt.exe "$PACKAGE_DIR/"
 cp SettingsHelp.txt "$PACKAGE_DIR/"
 cp -R samples "$PACKAGE_DIR/samples"
 find "$PACKAGE_DIR" -name ".DS_Store" -delete

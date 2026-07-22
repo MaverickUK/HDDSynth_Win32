@@ -30,7 +30,13 @@ static BOOL CALLBACK AboutDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
             SetDlgItemTextA(hDlg, IDC_ABOUT_APPNAME, HDDSYNTH_APP_NAME);
             wsprintfA(buf, "Version %s", HDDSYNTH_VERSION_STRING);
             SetDlgItemTextA(hDlg, IDC_ABOUT_VERSION, buf);
-            SetDlgItemTextA(hDlg, IDC_ABOUT_BUILD, HDDSYNTH_BUILD_NAME);
+
+            OSVERSIONINFOA osvi;
+            ZeroMemory(&osvi, sizeof(osvi));
+            osvi.dwOSVersionInfoSize = sizeof(osvi);
+            bool isNT = GetVersionExA(&osvi) && osvi.dwPlatformId == VER_PLATFORM_WIN32_NT;
+            SetDlgItemTextA(hDlg, IDC_ABOUT_BUILD,
+                            isNT ? "Running on Windows 2000/XP+" : "Running on Windows 95/98/ME");
             char audioBuf[48];
             wsprintfA(audioBuf, "Audio: %s", GetActiveAudioBackendName());
             SetDlgItemTextA(hDlg, IDC_ABOUT_AUDIOAPI, audioBuf);

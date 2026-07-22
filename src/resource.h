@@ -6,7 +6,6 @@
 
 #define IDD_ABOUT    200
 #define IDD_SETTINGS 201
-#define IDD_WRONGOS  202
 
 #define IDB_LOGO 300
 
@@ -34,7 +33,5 @@
 #define IDC_UNDERRUN_LABEL   1212
 #define IDC_AUDIOAPI_STATUS  1213
 #define IDC_HELP_BUTTON      1214
-
-#define IDC_WRONGOS_TEXT     1300
 
 #endif

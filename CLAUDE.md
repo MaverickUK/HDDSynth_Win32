@@ -6,50 +6,53 @@ with them, not a replacement for it.
 
 ## What this project is
 
-Two Windows system tray apps built from one codebase, cross-compiled from macOS (also works on
-Windows 11/Linux) using mingw-w64: `hddsynth.exe` (Windows 95/98/ME) and `hddsynth-nt.exe`
-(Windows 2000/XP+). They share every source file except the disk-activity monitor
-(`diskmon.cpp` vs `diskmon_nt.cpp`, both implementing `diskmon.h` — see README's "Two builds,
-one codebase"). There is no local way to run either built `.exe` — verification is static
-(`objdump`) here. Real behavioral verification happens on the user's actual Windows 98 hardware
-for the Win9x build; `hddsynth-nt.exe` has likewise been confirmed working on real Windows XP
-SP3 hardware (tray/audio/dialogs, PDH-based disk-activity detection) via a user report, but
-**there is still no NT-family hardware/VM available in this environment**, so any *new*
-NT-specific change remains unconfirmed regardless of how clean the build looks until it's
-actually re-tested on real hardware. Always be explicit about which kind of verification you've
-actually done, and for which target.
+A single Windows system tray app (`hddsynth.exe`), cross-compiled from macOS (also works on
+Windows 11/Linux) using mingw-w64, that runs on both Windows 95/98/ME and Windows 2000/XP+ from
+one binary. This used to be two separate builds (`hddsynth.exe`/`hddsynth-nt.exe`) differing only
+in the disk-activity monitor; that seam is now a runtime dispatch inside a single `diskmon.cpp`
+(`GetVersionExA` picks the Win9x `HKEY_DYN_DATA` path or the NT-family PDH path — see README's
+"One build, runtime dispatch"), built throughout with the conservative Win9x-safe compiler/linker
+flags, which are a strict subset of what NT-family Windows needs. There is no local way to run
+the built `.exe` — verification is static (`objdump`) here. Real behavioral verification happens
+on the user's actual Windows 98 hardware for the Win9x path; the NT-family (PDH) path was
+confirmed working on real Windows XP SP3 hardware via a user report **when it was still a
+separate `hddsynth-nt.exe` build** — that confirmation does not automatically carry over to this
+binary's merged, runtime-dispatched form, so **there is still no NT-family hardware/VM available
+in this environment** to re-verify it, and any *new* change touching the NT-family path in
+`diskmon.cpp` remains unconfirmed regardless of how clean the build looks until it's actually
+tested on real hardware. Always be explicit about which kind of verification you've actually
+done, and for which OS path.
 
 ## Build
 
 ```sh
-tools/build-pentium-crt.sh   # one-time; only re-run if the mingw-w64 formula updates; Win9x only
-make                          # builds build/hddsynth_spike.exe and build/hddsynth.exe (Win9x)
-make nt                       # builds build/hddsynth-nt.exe (Windows 2000/XP+)
+tools/build-pentium-crt.sh   # one-time; only re-run if the mingw-w64 formula updates
+make                          # builds build/hddsynth_spike.exe and build/hddsynth.exe
 make clean
 ```
 
-After every change, before handing off for testing (repeat for whichever target(s) you touched):
+After every change, before handing off for testing:
 
 ```sh
-i686-w64-mingw32-objdump -d build/hddsynth.exe > /tmp/check.txt      # or hddsynth-nt.exe
-grep -ciE '\b(cmov[a-z]*|rdtsc|cpuid)\b' /tmp/check.txt   # must be 0 for hddsynth.exe (Win9x
-                                                            # target only -- hddsynth-nt.exe is
-                                                            # allowed CMOV/etc., its min-spec CPUs
-                                                            # already have them)
+i686-w64-mingw32-objdump -d build/hddsynth.exe > /tmp/check.txt
+grep -ciE '\b(cmov[a-z]*|rdtsc|cpuid)\b' /tmp/check.txt   # must be 0 -- the whole binary is built
+                                                            # Win9x-safe, since that instruction
+                                                            # set is a strict subset of what NT
+                                                            # needs too (see README's Toolchain)
 i686-w64-mingw32-objdump -p build/hddsynth.exe | grep "DLL Name"
 ```
 
-Expected DLL set for `hddsynth.exe` (Win9x): `KERNEL32`, `USER32`, `GDI32`, `SHELL32`, `msvcrt`,
-`WINMM`, `ADVAPI32`, `COMCTL32`. For `hddsynth-nt.exe`: the same, plus `PDH` (`diskmon_nt.cpp`'s
-disk-activity counters) -- `ADVAPI32` is needed by both targets now, since `autostart.cpp`'s
-registry-based "Run at Windows Startup" toggle is shared code, not gated by the OS-family seam.
-A new dependency outside these sets is worth a second look before assuming it's fine.
+Expected DLL set: `KERNEL32`, `USER32`, `GDI32`, `SHELL32`, `msvcrt`, `WINMM`, `ADVAPI32`,
+`COMCTL32`. **No `PDH`** should appear here — the NT-family disk-activity path loads `pdh.dll`
+dynamically via `LoadLibraryA`/`GetProcAddress` at runtime instead of a static import, precisely
+so its absence on Win9x doesn't stop the exe loading there at all; `PDH` showing up in this list
+would mean that dynamic-loading discipline was broken. A new dependency outside the expected set
+is worth a second look before assuming it's fine.
 
 ## Hard rules (violating these breaks the build or silently breaks compatibility)
 
-Rules 1-4 are consequences of targeting classic `msvcrt.dll` via `-mcrtdll=msvcrt-os` — that
-choice applies to **both** build targets (UCRT doesn't exist on XP/2000 either, not just Win9x),
-so these rules apply to every file in `src/`, regardless of which `.exe` it ends up in.
+Rules 1-4 are consequences of targeting classic `msvcrt.dll` via `-mcrtdll=msvcrt-os` (UCRT
+doesn't exist on XP/2000 either, not just Win9x), so these rules apply to every file in `src/`.
 
 1. **`#define WIN32_LEAN_AND_MEAN` before every `#include <windows.h>`** — in `.cpp` files *and*
    `.rc` files. Without it in a `.cpp`, `windows.h` pulls in OLE/COM headers that drag in a
@@ -71,10 +74,10 @@ so these rules apply to every file in `src/`, regardless of which `.exe` it ends
    uniformly rather than diverging per target. Use plain Win32 primitives: `_beginthreadex`,
    `CRITICAL_SECTION`, `Interlocked*`.
 5. **Compiler/linker flags are load-bearing, not style choices.** `-mcrtdll=msvcrt-os`,
-   `-no-pthread`, and `-static -static-libgcc -static-libstdc++` apply to **both**
-   `CXXFLAGS`/`LDFLAGS` and `NT_CXXFLAGS`/`NT_LDFLAGS` in the `Makefile` for the reason above.
-   `-march=pentium -mtune=pentium` and the `-B`/`-L` pointing at the Pentium-safe CRT sysroot are
-   **Win9x-only** (`hddsynth-nt.exe` doesn't need them — see README's Toolchain section for why).
+   `-no-pthread`, `-static -static-libgcc -static-libstdc++`, `-march=pentium -mtune=pentium`,
+   and the `-B`/`-L` pointing at the Pentium-safe CRT sysroot all apply to the one `CXXFLAGS`/
+   `LDFLAGS` pair in the `Makefile` — there's only one build now, and the Pentium-safe flags are
+   what let it cover NT-family Windows too (see README's Toolchain section for why that's safe).
    Don't remove or "simplify" any of these without understanding why each exists — several were
    added in direct response to real crashes on hardware.
 6. **Never build paths from a bare relative string or assume the current working directory.**
@@ -83,9 +86,10 @@ so these rules apply to every file in `src/`, regardless of which `.exe` it ends
    (`GetPrivateProfileString`) look in the Windows directory instead of the CWD for a bare
    filename regardless.
 7. **OS-family-specific code belongs behind `diskmon.h`'s interface, nowhere else.** That's the
-   one deliberate seam between the two build targets (see README's "Two builds, one codebase").
-   If a future change needs OS-version-specific behavior anywhere else, that's a sign the seam
-   needs to move/widen, not a reason to sprinkle `#ifdef`s through shared files like `tray.cpp`
+   one deliberate seam between the two OS paths, resolved at runtime inside `diskmon.cpp` (see
+   README's "One build, runtime dispatch") rather than by separate builds. If a future change
+   needs OS-version-specific behavior anywhere else, that's a sign the seam needs to move/widen,
+   not a reason to sprinkle `GetVersionExA`/`#ifdef` checks through shared files like `tray.cpp`
    or `mixer.cpp`.
 
 ## Conventions
@@ -116,11 +120,10 @@ so these rules apply to every file in `src/`, regardless of which `.exe` it ends
   independent pieces, commit and (if releasing) it's fine to have several `feat:`/`fix:` commits
   land in the same release; what matters is each commit subject accurately describing that
   commit's one change, not spreading unrelated work across releases.
-- **Releasing**: bump `src/version.h`, commit, then run `tools/release.sh` — it builds both
-  targets, runs the static safety checks, packages `build/hddsynth.exe` +
-  `build/hddsynth-nt.exe` + `samples/` into a zip, generates release notes from commit history
-  (see above), tags, pushes, and creates the GitHub release via `gh`. Requires `gh auth login`
-  once beforehand.
+- **Releasing**: bump `src/version.h`, commit, then run `tools/release.sh` — it builds the
+  binary, runs the static safety checks, packages `build/hddsynth.exe` + `samples/` into a zip,
+  generates release notes from commit history (see above), tags, pushes, and creates the GitHub
+  release via `gh`. Requires `gh auth login` once beforehand.
 - **Record hard-won gotchas in README's "Gotchas found the hard way" section**, not just in
   commit messages — several of these (CRT/threading issues especially) are easy to
   reintroduce by accident and expensive to re-debug from scratch.
@@ -135,8 +138,8 @@ so these rules apply to every file in `src/`, regardless of which `.exe` it ends
 
 ## Testing workflow
 
-There's no Windows environment available to Claude directly for either target. The loop for the
-Win9x build (`hddsynth.exe`) is:
+There's no Windows environment available to Claude directly for either OS family. The loop for
+the Win9x path is:
 1. Make the change, build, run the static `objdump` checks above.
 2. Hand off `build/` (including `samples/`) to the user to copy onto real Windows 98 hardware.
 3. Treat their report as the actual test result — static checks only rule out *known* bad
@@ -146,10 +149,11 @@ Win9x build (`hddsynth.exe`) is:
    guessing repeatedly — guessing blind wasted multiple hardware-test round-trips earlier in
    this project.
 
-For `hddsynth-nt.exe`, there's no hardware/VM in this environment to hand off to directly, but a
-user has confirmed it working on real Windows XP SP3 hardware, including PDH-based disk-activity
-detection reacting to real activity — so a real, if less immediate, verification loop exists via
-user reports rather than the direct round-trip `hddsynth.exe` gets. For any *new* NT-specific
-change, still don't imply it works (e.g. don't say a change to `diskmon_nt.cpp` "works," only
-that it "builds cleanly") until it's actually been re-tested on real Windows 2000/XP hardware —
-the prior confirmation covers what was true at that point, not changes made since.
+For the NT-family path (the PDH branch inside `diskmon.cpp`), there's no hardware/VM in this
+environment to hand off to directly. A user confirmed the PDH-based disk-activity detection
+working on real Windows XP SP3 hardware, but that was **before** the merge into this single
+runtime-dispatched binary, back when it shipped as the separate `hddsynth-nt.exe` build — treat
+that confirmation as historical context for the underlying PDH logic, not as verification of the
+merged binary itself. For any change touching the NT-family path, don't imply it works (e.g.
+don't say a change to the PDH branch "works," only that it "builds cleanly") until it's actually
+been tested on real Windows 2000/XP hardware in this new single-binary form.

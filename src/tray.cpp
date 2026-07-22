@@ -152,42 +152,8 @@ HWND CreateTrayShell(HINSTANCE hInst) {
     return g_hwnd;
 }
 
-#ifndef HDDSYNTH_TARGET_NT
-static BOOL CALLBACK WrongOsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM) {
-    switch (msg) {
-        case WM_INITDIALOG:
-            return TRUE;
-        case WM_COMMAND:
-            if (LOWORD(wp) == IDOK || LOWORD(wp) == IDCANCEL) {
-                EndDialog(hDlg, 0);
-                return TRUE;
-            }
-            break;
-    }
-    return FALSE;
-}
-#endif
-
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     g_hInst = hInst;
-
-#ifndef HDDSYNTH_TARGET_NT
-    // This build targets Windows 95/98/ME's real-mode disk-activity polling
-    // (see diskmon.cpp); it doesn't work on the NT kernel (2000/XP+), which
-    // needs hddsynth-nt.exe's PDH-based diskmon_nt.cpp instead. A plain
-    // DialogBoxParamA (already linked in for the About/Settings dialogs) is
-    // used here rather than MessageBoxA -- pulling in that one extra USER32
-    // import alone was enough to push the .rsrc section past a linker bug
-    // in this toolchain ("(.rsrc) is too large"), even though its own
-    // content never changed size.
-    OSVERSIONINFOA osvi;
-    ZeroMemory(&osvi, sizeof(osvi));
-    osvi.dwOSVersionInfoSize = sizeof(osvi);
-    if (GetVersionExA(&osvi) && osvi.dwPlatformId == VER_PLATFORM_WIN32_NT) {
-        DialogBoxParamA(hInst, MAKEINTRESOURCEA(IDD_WRONGOS), NULL, WrongOsDlgProc, 0);
-        return 1;
-    }
-#endif
 
     InitCommonControls(); // needed before creating the Settings dialog's trackbars
 

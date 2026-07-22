@@ -9,13 +9,13 @@
 // (not sent) so the poll thread never blocks on the UI thread.
 #define WM_DISKACTIVITY (WM_APP + 2)
 
-// This interface has two implementations, picked at build time (see
-// Makefile): diskmon.cpp for Windows 9x/ME (HKEY_DYN_DATA\PerfStats,
-// undocumented, cumulative counters needing manual delta/threshold
-// tracking -- see its file header for the full story) and diskmon_nt.cpp
-// for Windows 2000/XP+ (PDH, documented, already rate-based). Everything
-// else in the app (tray.cpp, mixer.cpp, ...) only depends on this header,
-// not on which one is linked in.
+// diskmon.cpp implements both OS families' disk-activity detection behind
+// this one interface, picking between them at runtime (GetVersionExA):
+// Windows 9x/ME uses HKEY_DYN_DATA\PerfStats (undocumented, cumulative
+// counters needing manual delta/threshold tracking -- see its file header
+// for the full story); Windows 2000/XP+ uses PDH (documented, already
+// rate-based). Everything else in the app (tray.cpp, mixer.cpp, ...) only
+// depends on this header, not on which backend actually runs.
 
 // Starts a background thread polling for system-wide disk activity.
 // Returns true if the thread was created; this does NOT guarantee
