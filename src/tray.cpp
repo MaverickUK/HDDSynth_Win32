@@ -1,10 +1,10 @@
 // Tray shell: hidden message-only-style window, tray icon, right-click
-// menu (Sample pack submenu, Settings, About, Run at Windows Startup,
-// Exit), each item shown with an icon via SetMenuItemBitmaps (see
-// tools/make_menu_icons.py for how those are generated). Exposes
-// SetTrayActive() so other subsystems can flip the icon between gray
-// (idle) and green (activity) without knowing anything about window
-// messages.
+// menu (Sample pack submenu, Settings, About, Run at startup, Exit), most
+// items shown with an icon via SetMenuItemBitmaps (see
+// tools/make_menu_icons.py for how those are generated) -- Run at startup
+// keeps its native checkmark instead. Exposes SetTrayActive() so other
+// subsystems can flip the icon between gray (idle) and green (activity)
+// without knowing anything about window messages.
 //
 // See spike_main.cpp for why WIN32_LEAN_AND_MEAN is required here.
 #define WIN32_LEAN_AND_MEAN
@@ -38,11 +38,12 @@ static Settings g_settings;
 // Context-menu item icons (see tools/make_menu_icons.py) -- loaded once at
 // startup and reused for every menu rebuild, since SetMenuItemBitmaps just
 // references the HBITMAP handle rather than taking ownership of a copy.
+// Run at startup deliberately has no icon here -- it keeps its native
+// checkmark instead, which already conveys on/off more plainly than any
+// glyph could.
 static HBITMAP g_bmpSample;
 static HBITMAP g_bmpSettings;
 static HBITMAP g_bmpAbout;
-static HBITMAP g_bmpAutostartOn;
-static HBITMAP g_bmpAutostartOff;
 static HBITMAP g_bmpExit;
 
 // Rebuilt each time the context menu is opened (WM_TRAYICON) and consulted
@@ -106,8 +107,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 AppendMenuA(menu, MF_STRING, ID_TRAY_ABOUT, "About...");
                 SetMenuItemBitmaps(menu, pos++, MF_BYPOSITION, g_bmpAbout, g_bmpAbout);
                 AppendMenuA(menu, MF_STRING | (IsAutoStartEnabled() ? MF_CHECKED : 0),
-                            ID_TRAY_AUTOSTART, "Run at Windows Startup");
-                SetMenuItemBitmaps(menu, pos++, MF_BYPOSITION, g_bmpAutostartOff, g_bmpAutostartOn);
+                            ID_TRAY_AUTOSTART, "Run at startup");
+                pos++; // no icon -- native checkmark instead, see g_bmp* comment above
                 AppendMenuA(menu, MF_SEPARATOR, 0, NULL);
                 pos++;
                 AppendMenuA(menu, MF_STRING, ID_TRAY_EXIT, "Exit");
@@ -180,8 +181,6 @@ HWND CreateTrayShell(HINSTANCE hInst) {
     g_bmpSample = LoadBitmapA(hInst, MAKEINTRESOURCEA(IDB_MENU_SAMPLE));
     g_bmpSettings = LoadBitmapA(hInst, MAKEINTRESOURCEA(IDB_MENU_SETTINGS));
     g_bmpAbout = LoadBitmapA(hInst, MAKEINTRESOURCEA(IDB_MENU_ABOUT));
-    g_bmpAutostartOn = LoadBitmapA(hInst, MAKEINTRESOURCEA(IDB_MENU_AUTOSTART_ON));
-    g_bmpAutostartOff = LoadBitmapA(hInst, MAKEINTRESOURCEA(IDB_MENU_AUTOSTART_OFF));
     g_bmpExit = LoadBitmapA(hInst, MAKEINTRESOURCEA(IDB_MENU_EXIT));
 
     ZeroMemory(&g_nid, sizeof(g_nid));

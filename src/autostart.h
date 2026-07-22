@@ -1,7 +1,7 @@
 #ifndef HDDSYNTH_AUTOSTART_H
 #define HDDSYNTH_AUTOSTART_H
 
-// "Run at Windows Startup" via the per-user registry Run key
+// "Run at startup" via the per-user registry Run key
 // (HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run) --
 // no admin rights needed, works identically on every Windows version
 // this project targets, and needs no COM (unlike a Startup-folder

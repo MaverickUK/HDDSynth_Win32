@@ -132,7 +132,7 @@ Makefile    Cross-compilation build rules
 | `src/wav.cpp` / `wav.h` | Minimal WAV/PCM loader |
 | `src/diskmon.cpp` / `diskmon.h` | Disk-activity monitor: both the Win9x (`HKEY_DYN_DATA\PerfStats`) and 2000/XP+ (PDH) backends, dispatched at runtime, behind the shared interface header |
 | `src/settings.cpp` / `settings.h` | `hddsynth.ini` load/save |
-| `src/autostart.cpp` / `.h` | "Run at Windows Startup" via the per-user registry Run key |
+| `src/autostart.cpp` / `.h` | "Run at startup" via the per-user registry Run key |
 | `src/settings_dialog.cpp` / `.h` | Settings dialog (volume/balance sliders, threshold/min-playback edits) |
 | `src/about_dialog.cpp` / `.h` | About box |
 | `src/samplepack.cpp` / `.h` | Scans `samples\` for pack subfolders, builds per-pack WAV paths |
@@ -181,6 +181,7 @@ doesn't match the one currently playing).
 | Shutdown handling | `WM_QUERYENDSESSION`/`WM_ENDSESSION` reuse the same `DestroyWindow` path as Exit | Without this, Windows tearing down the audio driver stack during shutdown/logoff while this app is still mid-mix causes an audible glitch right at the end. Stopping playback as soon as the session is confirmed ending (not merely queried, since another app can still veto it) avoids racing that teardown. |
 | Context-menu icons | Classic 24-bit BITMAP resources via `SetMenuItemBitmaps` (`tools/make_menu_icons.py`), not the newer `MENUITEMINFO::hbmpItem` | `hbmpItem` wasn't introduced until Windows 2000, so it's off the table for a binary that also has to run on Win9x/ME. `SetMenuItemBitmaps` has existed since Windows 3.1 and works identically on both OS families, at the cost of no per-pixel transparency -- icons are generated against plain white to match the default classic Menu background color instead. |
 | Context-menu icon style | Flat single-color (black) silhouettes at 13x13, not colored/shaded art at 16x16 | A first pass used colored fills (blue info circle, red exit arrow) at 16x16 and, tested on real Windows 98 hardware, that caused two problems: color fills dithered noticeably on a limited-color display, and 16x16 overflowed the classic `SM_CXMENUCHECK` icon-column size (13px), clipping the bottom/edge of some icons. Flat black-on-white silhouettes at 13x13 with generous margins fixed both. |
+| Run at startup icon | None -- kept its native checkmark | A dedicated glyph (power symbol, then a badge-dot toggle for on/off) was tried and dropped: the checkmark Windows already draws for a checkable item conveys on/off more plainly than any icon could, so this one item stays icon-free rather than fighting that. |
 | Language | C++, conservative subset | No STL threading (`std::thread`/`std::mutex`) — MinGW's `winpthreads` backend calls synchronization primitives that don't exist on Win95. Plain Win32 primitives (`_beginthreadex`, `CRITICAL_SECTION`/`Interlocked*`) instead. |
 
 ## Toolchain

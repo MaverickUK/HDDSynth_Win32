@@ -7,12 +7,10 @@ IDB_LOGO  BITMAP "hddsynthlogo.bmp"
 
 // Context-menu item icons (src/tray.cpp, via SetMenuItemBitmaps) --
 // see tools/make_menu_icons.py for how these are generated.
-IDB_MENU_SAMPLE        BITMAP "menu_sample.bmp"
-IDB_MENU_SETTINGS      BITMAP "menu_settings.bmp"
-IDB_MENU_ABOUT         BITMAP "menu_about.bmp"
-IDB_MENU_AUTOSTART_ON  BITMAP "menu_autostart_on.bmp"
-IDB_MENU_AUTOSTART_OFF BITMAP "menu_autostart_off.bmp"
-IDB_MENU_EXIT          BITMAP "menu_exit.bmp"
+IDB_MENU_SAMPLE   BITMAP "menu_sample.bmp"
+IDB_MENU_SETTINGS BITMAP "menu_settings.bmp"
+IDB_MENU_ABOUT    BITMAP "menu_about.bmp"
+IDB_MENU_EXIT     BITMAP "menu_exit.bmp"
 
 // Resource type 24 = RT_MANIFEST, ID 1 = CREATEPROCESS_MANIFEST_RESOURCE_ID
 // (used as raw numbers rather than the symbolic names since those aren't

@@ -134,34 +134,8 @@ def note(color=BLACK):
     return img
 
 
-def power(on, color=BLACK):
-    """Run at Windows Startup: the standard power symbol for both states,
-    plus a small solid corner badge when enabled.
-
-    An earlier version tried to distinguish on/off with color (green vs
-    gray) and then, once forced to one color, by inverting the glyph to a
-    filled disc -- the inverted-fill version doesn't read as a power symbol
-    at all at this size. A badge dot keeps the same recognizable glyph in
-    both states and just adds an unambiguous "enabled" marker.
-    """
-    img = _canvas()
-    d = ImageDraw.Draw(img)
-    cx = cy = CANVAS / 2
-    r = CANVAS * 0.26
-    w = max(1, int(CANVAS * 0.09))
-    d.arc([cx - r, cy - r, cx + r, cy + r], start=-55, end=235, fill=color, width=w)
-    d.line([(cx, cy - r * 1.2), (cx, cy - r * 0.1)], fill=color, width=w)
-    if on:
-        br = CANVAS * 0.11
-        bx, by = cx + r * 0.95, cy + r * 0.95
-        d.ellipse([bx - br, by - br, bx + br, by + br], fill=color)
-    return img
-
-
 if __name__ == "__main__":
     _save(gear(), "menu_settings")
     _save(info(), "menu_about")
     _save(exit_icon(), "menu_exit")
     _save(note(), "menu_sample")
-    _save(power(on=True), "menu_autostart_on")
-    _save(power(on=False), "menu_autostart_off")
