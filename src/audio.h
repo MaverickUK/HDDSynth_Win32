@@ -24,8 +24,8 @@
 // can delay the GUI message queue for a second or more, and that's
 // exactly when this app most needs to keep playing.
 bool InitAudio(HWND hwnd, const char *spinupWavPath, const char *idleWavPath,
-                const char *accessWavPath, int volume, int balance, int minPlaybackMs,
-                int bufferMs, int audioApi);
+                const char *accessWavPath, int idleVolume, int accessVolume, int spinupVolume,
+                int minPlaybackMs, int bufferMs, int audioApi);
 
 // "DirectSound" or "WaveOut (MME)" -- whichever backend InitAudio
 // actually settled on, which may differ from what audioApi requested if
@@ -36,8 +36,9 @@ const char *GetActiveAudioBackendName();
 // Switches to a different audioApi choice live, in place -- tears down
 // only the active backend (waveOut or DirectSound) and re-runs the same
 // Auto/Force fallback InitAudio uses, using the hwnd/bufferMs it was
-// last (re)initialized with. The mixer (loaded samples, volume, balance)
-// is untouched, since none of that depends on which backend is active.
+// last (re)initialized with. The mixer (loaded samples, per-layer
+// volumes) is untouched, since none of that depends on which backend is
+// active.
 // Returns false only if no backend could be started at all (matches
 // InitAudio's existing failure semantics); a no-op (returns true) if
 // newAudioApi resolves to the backend that's already running.
@@ -54,8 +55,9 @@ unsigned long GetAudioUnderrunCount();
 // Thin pass-throughs to the mixer, so callers only need to depend on
 // audio.h.
 void SetAudioAccessActive(BOOL active);
-void SetAudioVolume(int volume);
-void SetAudioBalance(int balance);
+void SetAudioIdleVolume(int volume);
+void SetAudioAccessVolume(int volume);
+void SetAudioSpinupVolume(int volume);
 void SetAudioMinPlaybackMs(int ms);
 
 // Total queued audio depth in ms -- trades directly between latency

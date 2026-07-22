@@ -1,15 +1,13 @@
 HDD Synth Win32 - Settings Help
 ================================
 
-Volume
-------
-Overall loudness of everything the app plays.
-
-Balance
--------
-Crossfades between the idle hum and the access sound. All the way to
-"Idle" mutes the access sound; all the way to "Activity" mutes the idle
-hum.
+Idle Volume / Activity Volume / Spin-up Volume
+-----------------------------------------------
+Independent 0-100% loudness for each of the three sample layers -- the
+idle hum, the access sound, and the one-time spin-up sound played at
+startup. Set Spin-up Volume to 0% to skip the spin-up sound entirely
+rather than play it silently. Each slider has an edit box next to it if
+you'd rather type an exact value than drag.
 
 Minimum Access Playback (ms)
 -----------------------------

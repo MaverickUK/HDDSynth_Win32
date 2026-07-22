@@ -9,8 +9,9 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#define DEFAULT_VOLUME 100
-#define DEFAULT_BALANCE 50
+#define DEFAULT_IDLE_VOLUME 100
+#define DEFAULT_ACCESS_VOLUME 100
+#define DEFAULT_SPINUP_VOLUME 100
 #define DEFAULT_MIN_PLAYBACK_MS 200
 #define DEFAULT_ACTIVITY_THRESHOLD_BYTES 2048
 #define DEFAULT_AUDIO_BUFFER_MS 750
@@ -25,8 +26,9 @@ void LoadSettings(Settings *out) {
     char iniPath[MAX_PATH];
     GetIniPath(iniPath, sizeof(iniPath));
 
-    out->volume = GetPrivateProfileIntA("Audio", "Volume", DEFAULT_VOLUME, iniPath);
-    out->balance = GetPrivateProfileIntA("Audio", "Balance", DEFAULT_BALANCE, iniPath);
+    out->idleVolume = GetPrivateProfileIntA("Audio", "IdleVolume", DEFAULT_IDLE_VOLUME, iniPath);
+    out->accessVolume = GetPrivateProfileIntA("Audio", "AccessVolume", DEFAULT_ACCESS_VOLUME, iniPath);
+    out->spinupVolume = GetPrivateProfileIntA("Audio", "SpinupVolume", DEFAULT_SPINUP_VOLUME, iniPath);
     out->minPlaybackMs = GetPrivateProfileIntA("Audio", "MinPlaybackMs", DEFAULT_MIN_PLAYBACK_MS, iniPath);
     out->activityThresholdBytes = GetPrivateProfileIntA("Audio", "ActivityThresholdBytes",
                                                          DEFAULT_ACTIVITY_THRESHOLD_BYTES, iniPath);
@@ -36,10 +38,12 @@ void LoadSettings(Settings *out) {
     GetPrivateProfileStringA("Audio", "SamplePack", DEFAULT_SAMPLE_PACK,
                               out->samplePack, sizeof(out->samplePack), iniPath);
 
-    if (out->volume < 0) out->volume = 0;
-    if (out->volume > 100) out->volume = 100;
-    if (out->balance < 0) out->balance = 0;
-    if (out->balance > 100) out->balance = 100;
+    if (out->idleVolume < 0) out->idleVolume = 0;
+    if (out->idleVolume > 100) out->idleVolume = 100;
+    if (out->accessVolume < 0) out->accessVolume = 0;
+    if (out->accessVolume > 100) out->accessVolume = 100;
+    if (out->spinupVolume < 0) out->spinupVolume = 0;
+    if (out->spinupVolume > 100) out->spinupVolume = 100;
     if (out->minPlaybackMs < 0) out->minPlaybackMs = 0;
     if (out->activityThresholdBytes < 0) out->activityThresholdBytes = 0;
     if (out->audioBufferMs < MIN_AUDIO_BUFFER_MS) out->audioBufferMs = MIN_AUDIO_BUFFER_MS;
@@ -54,11 +58,14 @@ void SaveSettings(const Settings *s) {
     GetIniPath(iniPath, sizeof(iniPath));
 
     char buf[32];
-    wsprintfA(buf, "%d", s->volume);
-    WritePrivateProfileStringA("Audio", "Volume", buf, iniPath);
+    wsprintfA(buf, "%d", s->idleVolume);
+    WritePrivateProfileStringA("Audio", "IdleVolume", buf, iniPath);
 
-    wsprintfA(buf, "%d", s->balance);
-    WritePrivateProfileStringA("Audio", "Balance", buf, iniPath);
+    wsprintfA(buf, "%d", s->accessVolume);
+    WritePrivateProfileStringA("Audio", "AccessVolume", buf, iniPath);
+
+    wsprintfA(buf, "%d", s->spinupVolume);
+    WritePrivateProfileStringA("Audio", "SpinupVolume", buf, iniPath);
 
     wsprintfA(buf, "%d", s->minPlaybackMs);
     WritePrivateProfileStringA("Audio", "MinPlaybackMs", buf, iniPath);

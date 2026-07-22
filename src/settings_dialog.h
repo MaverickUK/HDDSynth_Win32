@@ -7,9 +7,9 @@
 
 // Shows the modal Settings dialog pre-filled from *s. The dialog also has
 // an Apply button: clicking it updates *s, persists it (SaveSettings),
-// and applies the changes live (audio volume/balance/min-playback/buffer
-// depth, disk monitor threshold) without closing the dialog -- same
-// effect as OK, just without ending it. Returns true if closed via OK,
+// and applies the changes live (per-layer audio volumes, min-playback,
+// buffer depth, disk monitor threshold) without closing the dialog --
+// same effect as OK, just without ending it. Returns true if closed via OK,
 // false if closed via Cancel; either way, *s and live state reflect
 // whatever was last Applied (or OK'd) during this call, same as any
 // other Win32 dialog with an Apply button -- Cancel doesn't roll that

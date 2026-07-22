@@ -7,9 +7,11 @@
 
 // Loads the three sample layers and resets playback to the start of the
 // spin-up sample. Returns true on success, false (with nothing latched)
-// if any file fails to load.
+// if any file fails to load. Each of idleVolume/accessVolume/spinupVolume
+// is an independent 0-100 level for its own layer -- spinupVolume of 0
+// skips spin-up playback entirely rather than playing it silently.
 bool MixerInit(const char *spinupPath, const char *idlePath, const char *accessPath,
-               int volume, int balance, int minPlaybackMs);
+               int idleVolume, int accessVolume, int spinupVolume, int minPlaybackMs);
 
 // Fills `count` samples of 16-bit mono PCM by advancing whichever layers
 // are currently active: spin-up plays once, then idle loops forever with
@@ -21,12 +23,12 @@ void MixerFillBuffer(short *out, size_t count);
 // different thread than MixerFillBuffer runs on (uses InterlockedExchange).
 void MixerSetAccessActive(BOOL active);
 
-// 0-100 master volume, applied after idle/access are combined.
-void MixerSetVolume(int volume);
-
-// 0-100, 50 = idle and access equally loud; toward 0 favors idle, toward
-// 100 favors access.
-void MixerSetBalance(int balance);
+// Independent 0-100 volume for each layer. MixerSetSpinupVolume(0) skips
+// spin-up entirely on the next fill if it hasn't started yet, or as soon
+// as the change takes effect if it's already mid-playback.
+void MixerSetIdleVolume(int volume);
+void MixerSetAccessVolume(int volume);
+void MixerSetSpinupVolume(int volume);
 
 // Minimum time (ms) the access layer keeps playing once triggered, even
 // if activity stops sooner.

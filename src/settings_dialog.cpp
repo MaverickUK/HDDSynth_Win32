@@ -1,8 +1,10 @@
-// Settings dialog: grouped into Playback (volume/balance), Disk Activity
-// (min access playback/activity threshold), Audio Engine (buffering/
-// Audio API), and Diagnostics (latency/glitches) group boxes -- all
-// trackbar sliders now, plus an Apply button alongside OK/Cancel so
-// changes can be tried live without closing the dialog -- handy for
+// Settings dialog: grouped into Playback (idle/activity/spin-up volume),
+// Disk Activity (min access playback/activity threshold), Audio Engine
+// (buffering/Audio API), and Diagnostics (latency/glitches) group boxes.
+// Every value is a trackbar slider paired with an EDIT box (see
+// SLIDER_EDITS below) so a value can be typed directly instead of only
+// ever hunted for by dragging -- plus an Apply button alongside OK/Cancel
+// so changes can be tried live without closing the dialog, handy for
 // A/B-testing settings against something like a large background file
 // copy. Trackbar is a common control (comctl32.dll, present on Win95+)
 // -- InitCommonControls() must be called once before any dialog
@@ -23,34 +25,90 @@
 #include <commctrl.h>
 #include <shellapi.h>
 
-static void UpdateVolumeLabel(HWND hDlg, int pos) {
-    char buf[16];
-    wsprintfA(buf, "%d%%", pos);
-    SetDlgItemTextA(hDlg, IDC_VOLUME_LABEL, buf);
+// Every slider in this dialog is paired with an EDIT box showing the same
+// value as plain digits (no embedded unit -- units are a separate static
+// LTEXT next to the edit, see the .rc) so one generic sync routine can
+// drive all of them, rather than hand-writing near-identical code six
+// times over. The edit's valid range is read from the slider's own
+// TBM_GETRANGEMIN/MAX rather than stored here, since the Buffer slider's
+// range changes at runtime depending on the active audio backend (see
+// UpdateBufferSliderRange) -- this way that's automatically respected
+// without a special case.
+struct SliderEditPair {
+    int sliderId;
+    int editId;
+};
+
+static const SliderEditPair SLIDER_EDITS[] = {
+    {IDC_IDLEVOL_SLIDER, IDC_IDLEVOL_EDIT},
+    {IDC_ACCESSVOL_SLIDER, IDC_ACCESSVOL_EDIT},
+    {IDC_SPINUPVOL_SLIDER, IDC_SPINUPVOL_EDIT},
+    {IDC_MINPLAY_SLIDER, IDC_MINPLAY_EDIT},
+    {IDC_THRESHOLD_SLIDER, IDC_THRESHOLD_EDIT},
+    {IDC_BUFFER_SLIDER, IDC_BUFFER_EDIT},
+};
+#define NUM_SLIDER_EDITS (sizeof(SLIDER_EDITS) / sizeof(SLIDER_EDITS[0]))
+
+// Hand-rolled digit parsing, clamped to [lo, hi] -- <stdlib.h>/<cstdlib>
+// (atoi, strtol, ...) are unusable anywhere in this codebase, see
+// CLAUDE.md. Empty or non-digit input returns fallback unchanged rather
+// than snapping to a range endpoint, so a momentarily-empty edit box
+// (user selected-all and hasn't typed yet) doesn't fight them.
+static int ParseIntClamped(const char *s, int lo, int hi, int fallback) {
+    if (!s || !*s) {
+        return fallback;
+    }
+    long value = 0;
+    for (const char *p = s; *p; p++) {
+        if (*p < '0' || *p > '9') {
+            return fallback;
+        }
+        value = value * 10 + (*p - '0');
+        if (value > hi) {
+            value = hi;
+            break;
+        }
+    }
+    if (value < lo) value = lo;
+    if (value > hi) value = hi;
+    return (int)value;
 }
 
-static void UpdateBalanceLabel(HWND hDlg, int pos) {
+static void UpdateEditFromSlider(HWND hDlg, int editId, int sliderId) {
+    int pos = (int)SendMessageA(GetDlgItem(hDlg, sliderId), TBM_GETPOS, 0, 0);
     char buf[16];
     wsprintfA(buf, "%d", pos);
-    SetDlgItemTextA(hDlg, IDC_BALANCE_LABEL, buf);
+    SetDlgItemTextA(hDlg, editId, buf);
 }
 
-static void UpdateBufferLabel(HWND hDlg, int pos) {
+// Reads the edit box's typed text, clamps it to the paired slider's
+// current range, moves the slider there, and echoes the clamped value
+// back into the edit -- so garbage/out-of-range/empty input never leaves
+// the two controls disagreeing with each other.
+static void SyncEditToSlider(HWND hDlg, int editId, int sliderId) {
+    HWND hSlider = GetDlgItem(hDlg, sliderId);
+    int lo = (int)SendMessageA(hSlider, TBM_GETRANGEMIN, 0, 0);
+    int hi = (int)SendMessageA(hSlider, TBM_GETRANGEMAX, 0, 0);
+    int current = (int)SendMessageA(hSlider, TBM_GETPOS, 0, 0);
+
     char buf[16];
-    wsprintfA(buf, "%dms", pos);
-    SetDlgItemTextA(hDlg, IDC_BUFFER_LABEL, buf);
+    GetDlgItemTextA(hDlg, editId, buf, sizeof(buf));
+    int value = ParseIntClamped(buf, lo, hi, current);
+
+    SendMessageA(hSlider, TBM_SETPOS, TRUE, value);
+    wsprintfA(buf, "%d", value);
+    SetDlgItemTextA(hDlg, editId, buf);
 }
 
-static void UpdateMinPlayLabel(HWND hDlg, int pos) {
-    char buf[16];
-    wsprintfA(buf, "%dms", pos);
-    SetDlgItemTextA(hDlg, IDC_MINPLAY_LABEL, buf);
-}
-
-static void UpdateThresholdLabel(HWND hDlg, int pos) {
-    char buf[16];
-    wsprintfA(buf, "%d", pos);
-    SetDlgItemTextA(hDlg, IDC_THRESHOLD_LABEL, buf);
+// Called right before reading controls into Settings (OK/Apply) so that
+// whatever's currently typed -- even in a box that never lost focus,
+// e.g. Enter pressed straight after typing -- is folded into its slider
+// first. Without this, a value typed but not yet KILLFOCUS-synced would
+// be silently discarded in favor of the slider's last dragged position.
+static void SyncAllEditsToSliders(HWND hDlg) {
+    for (size_t i = 0; i < NUM_SLIDER_EDITS; i++) {
+        SyncEditToSlider(hDlg, SLIDER_EDITS[i].editId, SLIDER_EDITS[i].sliderId);
+    }
 }
 
 #define DIAGNOSTICS_TIMER_ID 1
@@ -109,13 +167,14 @@ static void UpdateBufferSliderRange(HWND hDlg) {
     int pos = (int)SendMessageA(hBuf, TBM_GETPOS, 0, 0);
     if (pos < minMs) {
         SendMessageA(hBuf, TBM_SETPOS, TRUE, minMs);
-        UpdateBufferLabel(hDlg, minMs);
     }
+    UpdateEditFromSlider(hDlg, IDC_BUFFER_EDIT, IDC_BUFFER_SLIDER);
 }
 
 static void ReadControlsIntoSettings(HWND hDlg, Settings *s) {
-    s->volume = (int)SendMessageA(GetDlgItem(hDlg, IDC_VOLUME_SLIDER), TBM_GETPOS, 0, 0);
-    s->balance = (int)SendMessageA(GetDlgItem(hDlg, IDC_BALANCE_SLIDER), TBM_GETPOS, 0, 0);
+    s->idleVolume = (int)SendMessageA(GetDlgItem(hDlg, IDC_IDLEVOL_SLIDER), TBM_GETPOS, 0, 0);
+    s->accessVolume = (int)SendMessageA(GetDlgItem(hDlg, IDC_ACCESSVOL_SLIDER), TBM_GETPOS, 0, 0);
+    s->spinupVolume = (int)SendMessageA(GetDlgItem(hDlg, IDC_SPINUPVOL_SLIDER), TBM_GETPOS, 0, 0);
     s->audioBufferMs = (int)SendMessageA(GetDlgItem(hDlg, IDC_BUFFER_SLIDER), TBM_GETPOS, 0, 0);
     s->minPlaybackMs = (int)SendMessageA(GetDlgItem(hDlg, IDC_MINPLAY_SLIDER), TBM_GETPOS, 0, 0);
     s->activityThresholdBytes =
@@ -128,8 +187,9 @@ static void ReadControlsIntoSettings(HWND hDlg, Settings *s) {
 // see UpdateBufferSliderRange's comment for why that timing matters.
 static void ApplySettingsLive(HWND hDlg, const Settings *s) {
     SaveSettings(s);
-    SetAudioVolume(s->volume);
-    SetAudioBalance(s->balance);
+    SetAudioIdleVolume(s->idleVolume);
+    SetAudioAccessVolume(s->accessVolume);
+    SetAudioSpinupVolume(s->spinupVolume);
     SetAudioMinPlaybackMs(s->minPlaybackMs);
     SetDiskActivityThreshold(s->activityThresholdBytes);
     SetAudioApi(s->audioApi);
@@ -144,34 +204,37 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
             Settings *s = (Settings *)lp;
             SetWindowLongPtrA(hDlg, GWLP_USERDATA, (LONG_PTR)s);
 
-            HWND hVol = GetDlgItem(hDlg, IDC_VOLUME_SLIDER);
-            SendMessageA(hVol, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
-            SendMessageA(hVol, TBM_SETPOS, TRUE, s->volume);
-            UpdateVolumeLabel(hDlg, s->volume);
+            HWND hIdleVol = GetDlgItem(hDlg, IDC_IDLEVOL_SLIDER);
+            SendMessageA(hIdleVol, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
+            SendMessageA(hIdleVol, TBM_SETPOS, TRUE, s->idleVolume);
 
-            HWND hBal = GetDlgItem(hDlg, IDC_BALANCE_SLIDER);
-            SendMessageA(hBal, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
-            SendMessageA(hBal, TBM_SETPOS, TRUE, s->balance);
-            UpdateBalanceLabel(hDlg, s->balance);
+            HWND hAccessVol = GetDlgItem(hDlg, IDC_ACCESSVOL_SLIDER);
+            SendMessageA(hAccessVol, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
+            SendMessageA(hAccessVol, TBM_SETPOS, TRUE, s->accessVolume);
+
+            HWND hSpinupVol = GetDlgItem(hDlg, IDC_SPINUPVOL_SLIDER);
+            SendMessageA(hSpinupVol, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
+            SendMessageA(hSpinupVol, TBM_SETPOS, TRUE, s->spinupVolume);
 
             HWND hBuf = GetDlgItem(hDlg, IDC_BUFFER_SLIDER);
             SendMessageA(hBuf, TBM_SETRANGE, TRUE, MAKELONG(MIN_AUDIO_BUFFER_MS, MAX_AUDIO_BUFFER_MS));
             SendMessageA(hBuf, TBM_SETLINESIZE, 0, 50);
             SendMessageA(hBuf, TBM_SETPOS, TRUE, s->audioBufferMs);
-            UpdateBufferLabel(hDlg, s->audioBufferMs);
 
             HWND hMinPlay = GetDlgItem(hDlg, IDC_MINPLAY_SLIDER);
             SendMessageA(hMinPlay, TBM_SETRANGE, TRUE, MAKELONG(MIN_MINPLAY_MS, MAX_MINPLAY_MS));
             SendMessageA(hMinPlay, TBM_SETLINESIZE, 0, 50);
             SendMessageA(hMinPlay, TBM_SETPOS, TRUE, s->minPlaybackMs);
-            UpdateMinPlayLabel(hDlg, s->minPlaybackMs);
 
             HWND hThreshold = GetDlgItem(hDlg, IDC_THRESHOLD_SLIDER);
             SendMessageA(hThreshold, TBM_SETRANGE, TRUE,
                          MAKELONG(MIN_ACTIVITY_THRESHOLD_BYTES, MAX_ACTIVITY_THRESHOLD_BYTES));
             SendMessageA(hThreshold, TBM_SETLINESIZE, 0, 256);
             SendMessageA(hThreshold, TBM_SETPOS, TRUE, s->activityThresholdBytes);
-            UpdateThresholdLabel(hDlg, s->activityThresholdBytes);
+
+            for (size_t i = 0; i < NUM_SLIDER_EDITS; i++) {
+                UpdateEditFromSlider(hDlg, SLIDER_EDITS[i].editId, SLIDER_EDITS[i].sliderId);
+            }
 
             HWND hApi = GetDlgItem(hDlg, IDC_AUDIOAPI_COMBO);
             SendMessageA(hApi, CB_ADDSTRING, 0, (LPARAM)"Auto (Recommended)");
@@ -187,21 +250,11 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
         }
         case WM_HSCROLL: {
             HWND hCtl = (HWND)lp;
-            HWND hVol = GetDlgItem(hDlg, IDC_VOLUME_SLIDER);
-            HWND hBal = GetDlgItem(hDlg, IDC_BALANCE_SLIDER);
-            HWND hBuf = GetDlgItem(hDlg, IDC_BUFFER_SLIDER);
-            HWND hMinPlay = GetDlgItem(hDlg, IDC_MINPLAY_SLIDER);
-            HWND hThreshold = GetDlgItem(hDlg, IDC_THRESHOLD_SLIDER);
-            if (hCtl == hVol) {
-                UpdateVolumeLabel(hDlg, (int)SendMessageA(hVol, TBM_GETPOS, 0, 0));
-            } else if (hCtl == hBal) {
-                UpdateBalanceLabel(hDlg, (int)SendMessageA(hBal, TBM_GETPOS, 0, 0));
-            } else if (hCtl == hBuf) {
-                UpdateBufferLabel(hDlg, (int)SendMessageA(hBuf, TBM_GETPOS, 0, 0));
-            } else if (hCtl == hMinPlay) {
-                UpdateMinPlayLabel(hDlg, (int)SendMessageA(hMinPlay, TBM_GETPOS, 0, 0));
-            } else if (hCtl == hThreshold) {
-                UpdateThresholdLabel(hDlg, (int)SendMessageA(hThreshold, TBM_GETPOS, 0, 0));
+            for (size_t i = 0; i < NUM_SLIDER_EDITS; i++) {
+                if (hCtl == GetDlgItem(hDlg, SLIDER_EDITS[i].sliderId)) {
+                    UpdateEditFromSlider(hDlg, SLIDER_EDITS[i].editId, SLIDER_EDITS[i].sliderId);
+                    break;
+                }
             }
             return 0;
         }
@@ -217,17 +270,27 @@ static BOOL CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) 
         case WM_COMMAND:
             if (LOWORD(wp) == IDOK) {
                 Settings *s = (Settings *)GetWindowLongPtrA(hDlg, GWLP_USERDATA);
+                SyncAllEditsToSliders(hDlg);
                 ReadControlsIntoSettings(hDlg, s);
                 ApplySettingsLive(hDlg, s);
                 EndDialog(hDlg, IDOK);
                 return TRUE;
             } else if (LOWORD(wp) == IDC_APPLY_BUTTON) {
                 Settings *s = (Settings *)GetWindowLongPtrA(hDlg, GWLP_USERDATA);
+                SyncAllEditsToSliders(hDlg);
                 ReadControlsIntoSettings(hDlg, s);
                 ApplySettingsLive(hDlg, s);
                 return TRUE;
             } else if (LOWORD(wp) == IDC_AUDIOAPI_COMBO && HIWORD(wp) == CBN_SELCHANGE) {
                 UpdateBufferSliderRange(hDlg);
+                return TRUE;
+            } else if (HIWORD(wp) == EN_KILLFOCUS) {
+                for (size_t i = 0; i < NUM_SLIDER_EDITS; i++) {
+                    if (LOWORD(wp) == (WORD)SLIDER_EDITS[i].editId) {
+                        SyncEditToSlider(hDlg, SLIDER_EDITS[i].editId, SLIDER_EDITS[i].sliderId);
+                        break;
+                    }
+                }
                 return TRUE;
             } else if (LOWORD(wp) == IDC_HELP_BUTTON) {
                 OpenSettingsHelp(hDlg);

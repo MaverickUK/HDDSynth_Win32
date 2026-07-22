@@ -36,32 +36,43 @@ BEGIN
     DEFPUSHBUTTON "OK", IDOK, 85, 169, 50, 14
 END
 
-IDD_SETTINGS DIALOG 0, 0, 460, 212
+IDD_SETTINGS DIALOG 0, 0, 460, 222
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "HDD Synth Settings"
 FONT 8, "MS Sans Serif"
 BEGIN
     // Two-column layout: left column is Playback (top) + Disk Activity
     // (bottom), right column is Audio Engine (top) + Diagnostics
-    // (bottom) -- wider and considerably shorter than the single stacked
-    // column this used to be. Right column's x values are the left
-    // column's plus 230 (column width 220 + 10 gap).
+    // (bottom). Right column's x values are the left column's plus 230
+    // (column width 220 + 10 gap). Every slider has an EDIT box beside it
+    // (plus a unit suffix where one applies) so a value can be typed
+    // directly instead of only ever dragged -- see settings_dialog.cpp's
+    // SLIDER_EDITS table, which drives all of them generically. Playback
+    // is taller than it used to be (three independent volume sliders
+    // instead of one Volume + one Idle/Activity Balance slider), so Disk
+    // Activity/Diagnostics below both shift down to match.
 
-    GROUPBOX  "Playback", -1, 5, 5, 220, 90
-    LTEXT     "Volume", -1, 10, 17, 60, 10
-    CONTROL   "", IDC_VOLUME_SLIDER, "msctls_trackbar32", 0x00000001, 10, 29, 150, 15
-    LTEXT     "", IDC_VOLUME_LABEL, 165, 31, 45, 10
+    GROUPBOX  "Playback", -1, 5, 5, 220, 100
+    LTEXT     "Idle volume", -1, 10, 17, 90, 10
+    CONTROL   "", IDC_IDLEVOL_SLIDER, "msctls_trackbar32", 0x00000001, 10, 29, 110, 15
+    EDITTEXT  IDC_IDLEVOL_EDIT, 125, 30, 30, 13, ES_NUMBER | ES_RIGHT
+    LTEXT     "%", -1, 158, 32, 10, 10
 
-    LTEXT     "Balance", -1, 10, 51, 60, 10
-    CONTROL   "", IDC_BALANCE_SLIDER, "msctls_trackbar32", 0x00000001, 10, 63, 150, 15
-    LTEXT     "", IDC_BALANCE_LABEL, 165, 65, 45, 10
-    LTEXT     "Idle", -1, 10, 79, 30, 10
-    RTEXT     "Activity", -1, 120, 79, 40, 10
+    LTEXT     "Activity volume", -1, 10, 45, 90, 10
+    CONTROL   "", IDC_ACCESSVOL_SLIDER, "msctls_trackbar32", 0x00000001, 10, 57, 110, 15
+    EDITTEXT  IDC_ACCESSVOL_EDIT, 125, 58, 30, 13, ES_NUMBER | ES_RIGHT
+    LTEXT     "%", -1, 158, 60, 10, 10
+
+    LTEXT     "Spin-up volume", -1, 10, 73, 90, 10
+    CONTROL   "", IDC_SPINUPVOL_SLIDER, "msctls_trackbar32", 0x00000001, 10, 85, 110, 15
+    EDITTEXT  IDC_SPINUPVOL_EDIT, 125, 86, 30, 13, ES_NUMBER | ES_RIGHT
+    LTEXT     "%", -1, 158, 88, 10, 10
 
     GROUPBOX  "Audio Engine", -1, 235, 5, 220, 90
     LTEXT     "Audio buffering", -1, 240, 17, 80, 10
-    CONTROL   "", IDC_BUFFER_SLIDER, "msctls_trackbar32", 0x00000001, 240, 29, 150, 15
-    LTEXT     "", IDC_BUFFER_LABEL, 395, 31, 45, 10
+    CONTROL   "", IDC_BUFFER_SLIDER, "msctls_trackbar32", 0x00000001, 240, 29, 110, 15
+    EDITTEXT  IDC_BUFFER_EDIT, 355, 30, 35, 13, ES_NUMBER | ES_RIGHT
+    LTEXT     "ms", -1, 393, 32, 15, 10
     LTEXT     "Low lag", -1, 240, 45, 40, 10
     RTEXT     "Fewer dropouts", -1, 330, 45, 60, 10
 
@@ -69,21 +80,22 @@ BEGIN
     COMBOBOX  IDC_AUDIOAPI_COMBO, 310, 59, 140, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT     "", IDC_AUDIOAPI_STATUS, 240, 75, 210, 10
 
-    GROUPBOX  "Disk Activity", -1, 5, 103, 220, 75
-    LTEXT     "Minimum access playback", -1, 10, 115, 110, 10
-    CONTROL   "", IDC_MINPLAY_SLIDER, "msctls_trackbar32", 0x00000001, 10, 127, 150, 15
-    LTEXT     "", IDC_MINPLAY_LABEL, 165, 129, 45, 10
+    GROUPBOX  "Disk Activity", -1, 5, 113, 220, 75
+    LTEXT     "Minimum access playback", -1, 10, 125, 110, 10
+    CONTROL   "", IDC_MINPLAY_SLIDER, "msctls_trackbar32", 0x00000001, 10, 137, 110, 15
+    EDITTEXT  IDC_MINPLAY_EDIT, 125, 137, 30, 13, ES_NUMBER | ES_RIGHT
+    LTEXT     "ms", -1, 158, 139, 15, 10
 
-    LTEXT     "Activity threshold (bytes/poll)", -1, 10, 145, 150, 10
-    CONTROL   "", IDC_THRESHOLD_SLIDER, "msctls_trackbar32", 0x00000001, 10, 157, 150, 15
-    LTEXT     "", IDC_THRESHOLD_LABEL, 165, 159, 45, 10
+    LTEXT     "Activity threshold (bytes/poll)", -1, 10, 155, 150, 10
+    CONTROL   "", IDC_THRESHOLD_SLIDER, "msctls_trackbar32", 0x00000001, 10, 167, 110, 15
+    EDITTEXT  IDC_THRESHOLD_EDIT, 125, 167, 30, 13, ES_NUMBER | ES_RIGHT
 
-    GROUPBOX  "Diagnostics", -1, 235, 103, 220, 75
-    LTEXT     "", IDC_LATENCY_LABEL, 250, 135, 100, 10
-    LTEXT     "", IDC_UNDERRUN_LABEL, 360, 135, 100, 10
+    GROUPBOX  "Diagnostics", -1, 235, 113, 220, 75
+    LTEXT     "", IDC_LATENCY_LABEL, 250, 145, 100, 10
+    LTEXT     "", IDC_UNDERRUN_LABEL, 360, 145, 100, 10
 
-    PUSHBUTTON    "Help", IDC_HELP_BUTTON, 115, 188, 50, 14
-    DEFPUSHBUTTON "OK", IDOK, 170, 188, 50, 14
-    PUSHBUTTON    "Cancel", IDCANCEL, 225, 188, 50, 14
-    PUSHBUTTON    "Apply", IDC_APPLY_BUTTON, 280, 188, 50, 14
+    PUSHBUTTON    "Help", IDC_HELP_BUTTON, 115, 198, 50, 14
+    DEFPUSHBUTTON "OK", IDOK, 170, 198, 50, 14
+    PUSHBUTTON    "Cancel", IDCANCEL, 225, 198, 50, 14
+    PUSHBUTTON    "Apply", IDC_APPLY_BUTTON, 280, 198, 50, 14
 END

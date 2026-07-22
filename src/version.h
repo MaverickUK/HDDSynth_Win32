@@ -4,9 +4,9 @@
 // SemVer. Pre-1.0 since this hasn't been released yet -- bump PATCH for
 // fixes, MINOR for feature additions, per change made to the project.
 #define HDDSYNTH_VERSION_MAJOR 0
-#define HDDSYNTH_VERSION_MINOR 12
-#define HDDSYNTH_VERSION_PATCH 3
-#define HDDSYNTH_VERSION_STRING "0.12.3"
+#define HDDSYNTH_VERSION_MINOR 13
+#define HDDSYNTH_VERSION_PATCH 0
+#define HDDSYNTH_VERSION_STRING "0.13.0"
 
 #define HDDSYNTH_APP_NAME "HDD Synth Win32"
 #define HDDSYNTH_AUTHOR "Peter Bridger"

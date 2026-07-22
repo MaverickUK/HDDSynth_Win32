@@ -7,7 +7,7 @@
 //  - g_accessActive is a single flag set from the GUI thread (forwarding
 //    the disk monitor's findings) -- Interlocked access is enough.
 //  - The sample buffers themselves (g_spinup/g_idle/g_access) and the
-//    volume/balance/min-playback settings can all be replaced from the
+//    per-layer volumes/min-playback settings can all be replaced from the
 //    GUI thread (Settings dialog, sample pack switch) while the audio
 //    thread is mid-mix. These are compound/multi-field state an
 //    Interlocked op can't swap atomically, so they're behind
@@ -21,8 +21,9 @@ static CRITICAL_SECTION g_lock;
 static WavPcm g_spinup;
 static WavPcm g_idle;
 static WavPcm g_access;
-static int g_volume = 100;
-static int g_balance = 50;
+static int g_idleVolume = 100;
+static int g_accessVolume = 100;
+static int g_spinupVolume = 100;
 static int g_minPlaybackMs = 200;
 
 static MixerPhase g_phase = PHASE_SPINUP;
@@ -52,7 +53,7 @@ static unsigned long NextRandom() {
 }
 
 bool MixerInit(const char *spinupPath, const char *idlePath, const char *accessPath,
-               int volume, int balance, int minPlaybackMs) {
+               int idleVolume, int accessVolume, int spinupVolume, int minPlaybackMs) {
     InitializeCriticalSection(&g_lock);
 
     if (!LoadWavMono16(spinupPath, &g_spinup) ||
@@ -66,8 +67,9 @@ bool MixerInit(const char *spinupPath, const char *idlePath, const char *accessP
     g_accessPos = 0;
     g_accessPlaying = false;
     g_accessMinRemaining = 0;
-    g_volume = volume;
-    g_balance = balance;
+    g_idleVolume = idleVolume;
+    g_accessVolume = accessVolume;
+    g_spinupVolume = spinupVolume;
     g_minPlaybackMs = minPlaybackMs;
     SeedRng((unsigned long)GetTickCount());
     return true;
@@ -82,34 +84,28 @@ static short ClampSample(int v) {
 void MixerFillBuffer(short *out, size_t count) {
     EnterCriticalSection(&g_lock);
 
-    int volume = g_volume;
-    // Straight linear crossfade: idle at 100% / access at 0% when
-    // balance=0 ("Idle" end), the reverse at balance=100 ("Activity"
-    // end), 50/50 at center. Previously this floored each side at 50%
-    // (never fully silencing either layer) so that neither could be
-    // muted by balance alone -- but that meant balance=100 still left
-    // idle audible, which is exactly backwards from what the slider
-    // labels ("Idle" / "Activity") imply and what a user reasonably
-    // expects. Master Volume still scales the combined result, so
-    // overall loudness at the 50/50 center can be compensated there if
-    // it feels quieter than before.
-    int idleWeightX100 = 100 - g_balance;
-    int accessWeightX100 = g_balance;
+    int idleVolume = g_idleVolume;
+    int accessVolume = g_accessVolume;
+    int spinupVolume = g_spinupVolume;
 
     for (size_t i = 0; i < count; i++) {
         if (g_phase == PHASE_SPINUP) {
-            if (g_spinup.sampleCount == 0 || g_spinupPos >= g_spinup.sampleCount) {
+            // spinupVolume == 0 skips spin-up outright rather than mixing
+            // in silence -- checked per-sample (not just once at Init) so
+            // turning it down to 0 mid-playback also cuts it short instead
+            // of waiting for it to finish inaudibly.
+            if (spinupVolume == 0 || g_spinup.sampleCount == 0 || g_spinupPos >= g_spinup.sampleCount) {
                 g_phase = PHASE_IDLE;
                 g_idlePos = 0;
             } else {
-                int v = (g_spinup.samples[g_spinupPos++] * volume) / 100;
+                int v = (g_spinup.samples[g_spinupPos++] * spinupVolume) / 100;
                 out[i] = ClampSample(v);
                 continue;
             }
         }
 
         // PHASE_IDLE
-        int mixed = (g_idle.samples[g_idlePos] * idleWeightX100) / 100;
+        int mixed = (g_idle.samples[g_idlePos] * idleVolume) / 100;
         g_idlePos++;
         if (g_idlePos >= g_idle.sampleCount) {
             g_idlePos = 0;
@@ -126,7 +122,7 @@ void MixerFillBuffer(short *out, size_t count) {
         }
 
         if (g_accessPlaying && g_access.sampleCount > 0) {
-            mixed += (g_access.samples[g_accessPos] * accessWeightX100) / 100;
+            mixed += (g_access.samples[g_accessPos] * accessVolume) / 100;
             g_accessPos++;
             if (g_accessPos >= g_access.sampleCount) {
                 g_accessPos = 0;
@@ -140,7 +136,6 @@ void MixerFillBuffer(short *out, size_t count) {
             }
         }
 
-        mixed = (mixed * volume) / 100;
         out[i] = ClampSample(mixed);
     }
 
@@ -151,15 +146,21 @@ void MixerSetAccessActive(BOOL active) {
     InterlockedExchange(&g_accessActive, active ? 1 : 0);
 }
 
-void MixerSetVolume(int volume) {
+void MixerSetIdleVolume(int volume) {
     EnterCriticalSection(&g_lock);
-    g_volume = volume;
+    g_idleVolume = volume;
     LeaveCriticalSection(&g_lock);
 }
 
-void MixerSetBalance(int balance) {
+void MixerSetAccessVolume(int volume) {
     EnterCriticalSection(&g_lock);
-    g_balance = balance;
+    g_accessVolume = volume;
+    LeaveCriticalSection(&g_lock);
+}
+
+void MixerSetSpinupVolume(int volume) {
+    EnterCriticalSection(&g_lock);
+    g_spinupVolume = volume;
     LeaveCriticalSection(&g_lock);
 }
 

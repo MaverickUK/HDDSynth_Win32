@@ -44,9 +44,10 @@ static bool StartBackend(int audioApi) {
 }
 
 bool InitAudio(HWND hwnd, const char *spinupWavPath, const char *idleWavPath,
-                const char *accessWavPath, int volume, int balance, int minPlaybackMs,
-                int bufferMs, int audioApi) {
-    if (!MixerInit(spinupWavPath, idleWavPath, accessWavPath, volume, balance, minPlaybackMs)) {
+                const char *accessWavPath, int idleVolume, int accessVolume, int spinupVolume,
+                int minPlaybackMs, int bufferMs, int audioApi) {
+    if (!MixerInit(spinupWavPath, idleWavPath, accessWavPath, idleVolume, accessVolume,
+                   spinupVolume, minPlaybackMs)) {
         return false;
     }
 
@@ -95,12 +96,16 @@ void SetAudioAccessActive(BOOL active) {
     MixerSetAccessActive(active);
 }
 
-void SetAudioVolume(int volume) {
-    MixerSetVolume(volume);
+void SetAudioIdleVolume(int volume) {
+    MixerSetIdleVolume(volume);
 }
 
-void SetAudioBalance(int balance) {
-    MixerSetBalance(balance);
+void SetAudioAccessVolume(int volume) {
+    MixerSetAccessVolume(volume);
+}
+
+void SetAudioSpinupVolume(int volume) {
+    MixerSetSpinupVolume(volume);
 }
 
 void SetAudioMinPlaybackMs(int ms) {

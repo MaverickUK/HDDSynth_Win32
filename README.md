@@ -43,12 +43,14 @@ it with each change.
 - Right-click the tray icon for:
   - **Sample** — a submenu listing every subfolder under `samples\` (each a self-contained
     sample pack); picking one switches live, no restart needed.
-  - **Settings...** — volume, idle/activity balance (0 = idle only, 100 = access only, 50 =
-    even), audio buffering (see note below), minimum access playback time, and the activity
-    detection threshold, persisted to `hddsynth.ini` next to the exe. An Apply button commits
-    changes live without closing the dialog, for quickly trying several settings in a row
-    against the same real activity (e.g. a large background copy) — Cancel afterward doesn't
-    undo whatever was already Applied, same as any other Win32 dialog with an Apply button.
+  - **Settings...** — independent 0-100% volume for each of the idle/access/spin-up layers
+    (spin-up at 0% skips it entirely rather than playing it silently), audio buffering (see note
+    below), minimum access playback time, and the activity detection threshold, persisted to
+    `hddsynth.ini` next to the exe. Every slider has an edit box beside it for typing an exact
+    value directly. An Apply button commits changes live without closing the dialog, for quickly
+    trying several settings in a row against the same real activity (e.g. a large background
+    copy) — Cancel afterward doesn't undo whatever was already Applied, same as any other Win32
+    dialog with an Apply button.
   - **About...** — Win9x-style about box with the project logo, version, which build you're
     running (Windows 95/98/ME vs Windows 2000/XP+), author, and a link to the project page.
   - **Exit**.
@@ -128,12 +130,12 @@ Makefile    Cross-compilation build rules
 |---|---|
 | `src/tray.cpp` | Tray icon, context menu, window/message loop, `WinMain` |
 | `src/audio.cpp` / `audio.h` | Owns the single `waveOut` stream and its dedicated refill thread |
-| `src/mixer.cpp` / `mixer.h` | Software PCM mixing: spin-up → idle loop → access layering, volume/balance, live pack swaps |
+| `src/mixer.cpp` / `mixer.h` | Software PCM mixing: spin-up → idle loop → access layering, independent per-layer volumes, live pack swaps |
 | `src/wav.cpp` / `wav.h` | Minimal WAV/PCM loader |
 | `src/diskmon.cpp` / `diskmon.h` | Disk-activity monitor: both the Win9x (`HKEY_DYN_DATA\PerfStats`) and 2000/XP+ (PDH) backends, dispatched at runtime, behind the shared interface header |
 | `src/settings.cpp` / `settings.h` | `hddsynth.ini` load/save |
 | `src/autostart.cpp` / `.h` | "Run at startup" via the per-user registry Run key |
-| `src/settings_dialog.cpp` / `.h` | Settings dialog (volume/balance sliders, threshold/min-playback edits) |
+| `src/settings_dialog.cpp` / `.h` | Settings dialog (per-layer volume/threshold/min-playback/buffer sliders, each with a paired edit box) |
 | `src/about_dialog.cpp` / `.h` | About box |
 | `src/samplepack.cpp` / `.h` | Scans `samples\` for pack subfolders, builds per-pack WAV paths |
 | `src/paths.cpp` / `.h` | Resolves paths relative to the exe's own directory, not the CWD |
@@ -182,6 +184,7 @@ doesn't match the one currently playing).
 | Context-menu icons | Classic 24-bit BITMAP resources via `SetMenuItemBitmaps` (`tools/make_menu_icons.py`), not the newer `MENUITEMINFO::hbmpItem` | `hbmpItem` wasn't introduced until Windows 2000, so it's off the table for a binary that also has to run on Win9x/ME. `SetMenuItemBitmaps` has existed since Windows 3.1 and works identically on both OS families, at the cost of no per-pixel transparency -- icons are generated against plain white to match the default classic Menu background color instead. |
 | Context-menu icon style | Flat single-color (black) silhouettes at 13x13, not colored/shaded art at 16x16 | A first pass used colored fills (blue info circle, red exit arrow) at 16x16 and, tested on real Windows 98 hardware, that caused two problems: color fills dithered noticeably on a limited-color display, and 16x16 overflowed the classic `SM_CXMENUCHECK` icon-column size (13px), clipping the bottom/edge of some icons. Flat black-on-white silhouettes at 13x13 with generous margins fixed both. |
 | Run at startup icon | None -- kept its native checkmark | A dedicated glyph (power symbol, then a badge-dot toggle for on/off) was tried and dropped: the checkmark Windows already draws for a checkable item conveys on/off more plainly than any icon could, so this one item stays icon-free rather than fighting that. |
+| Settings sliders | Each paired with a plain-digit EDIT box, synced both ways (`settings_dialog.cpp`'s `SLIDER_EDITS` table) | Dragging a trackbar to an exact value is imprecise -- a user asked to just be able to type the number instead. The edit's valid range is read from the slider's own `TBM_GETRANGEMIN`/`MAX` at sync time rather than stored separately, so the Buffer slider's runtime-varying floor (see `UpdateBufferSliderRange`) doesn't need special-casing. Synced on `EN_KILLFOCUS` for immediate feedback while tabbing between fields, and again in a batch right before OK/Apply read the controls, so a value typed and confirmed with Enter (which never moves focus away from the edit) isn't silently dropped in favor of the slider's last dragged position. |
 | Language | C++, conservative subset | No STL threading (`std::thread`/`std::mutex`) — MinGW's `winpthreads` backend calls synchronization primitives that don't exist on Win95. Plain Win32 primitives (`_beginthreadex`, `CRITICAL_SECTION`/`Interlocked*`) instead. |
 
 ## Toolchain
@@ -301,14 +304,16 @@ so I've recorded them here rather than leaving them buried in commit history:
   `<pdhmsg.h>`, not `<pdh.h>`** — including only `<pdh.h>` (which declares the functions/types)
   compiles fine right up until you reference one of those constants, at which point it's an
   undeclared-identifier error rather than a missing-include one.
-- **The Balance slider used to floor each side at 50%, so it could never fully mute either
-  layer** (`idleWeightX100 = 150 - balance`, `accessWeightX100 = 50 + balance` — at balance=100
-  that's still 50% idle, not 0%). That was a deliberate choice at the time (never silence a
-  layer via balance alone), but it directly contradicted what the slider's own end labels
-  ("Idle"/"Activity") imply, and a user reported exactly that — setting Activity to 100 still
-  left idle audible. Fixed to a straight linear crossfade (`100 - balance` / `balance`) so the
-  extremes actually reach full mute, at the cost of each layer only being at 50% (not 100%) at
-  the center — Volume still scales the combined result if that reads as quieter overall.
+- **The Volume + Balance model (a master volume plus an idle/access crossfade) went through two
+  rounds of fixes before being dropped entirely in favor of independent per-layer volumes.**
+  First the Balance slider used to floor each side at 50% so neither could be fully muted
+  (`idleWeightX100 = 150 - balance`, `accessWeightX100 = 50 + balance` — at balance=100 that's
+  still 50% idle, not 0%), which directly contradicted what the slider's own end labels
+  ("Idle"/"Activity") implied; that was fixed to a straight linear crossfade. But a crossfade
+  is still fundamentally a single shared knob — a user later asked for independent Idle/Activity/
+  Spin-up volume sliders instead, which is a strictly more flexible model (a crossfade is just
+  one specific relationship between two volumes; independent sliders can reproduce that
+  relationship or any other), so the whole Balance concept was removed rather than fixed further.
 - **The Pentium-safe CRT sysroot (`/tmp/mingw-pentium-sysroot`, see Toolchain) can go missing or
   incomplete without the build failing or even warning.** `-B`/`-L` just add it to the linker's
   search path; if `crt2.o`/`libmingw32.a`/`libmingwex.a` aren't there, the linker silently falls

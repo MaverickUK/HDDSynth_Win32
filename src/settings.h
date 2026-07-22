@@ -29,8 +29,9 @@
 #define MAX_ACTIVITY_THRESHOLD_BYTES 32768
 
 struct Settings {
-    int volume;                  // 0-100
-    int balance;                 // 0-100, 50 = idle/activity equally loud
+    int idleVolume;               // 0-100
+    int accessVolume;             // 0-100
+    int spinupVolume;             // 0-100, 0 skips spin-up playback entirely
     int minPlaybackMs;            // access sample minimum play time
     int activityThresholdBytes;   // bytes/poll before it counts as activity
     int audioBufferMs;            // total queued audio depth: latency vs stall resilience
